@@ -16,6 +16,7 @@ from app.models.domain import (
     SessionStatus,
     ToolCall,
     ToolResult,
+    utc_now,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "SessionStatus",
     "ToolCall",
     "ToolResult",
+    "utc_now",
 ]
