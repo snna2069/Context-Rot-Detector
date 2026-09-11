@@ -31,3 +31,12 @@ def get_next_call_index(db: DBSession, message_id: str) -> int:
     )
     highest = db.scalar(stmt)
     return 0 if highest is None else highest + 1
+
+
+def list_by_session(db: DBSession, session_id: str) -> list[ToolCall]:
+    stmt = (
+        select(ToolCall)
+        .where(ToolCall.session_id == session_id)
+        .order_by(ToolCall.call_index)
+    )
+    return list(db.scalars(stmt))

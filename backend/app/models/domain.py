@@ -68,6 +68,11 @@ class DetectionType(StrEnum):
     REPETITION = "repetition"
     UNSUPPORTED_CLAIM = "unsupported_claim"
     TOOL_RESULT_MISUSE = "tool_result_misuse"
+    CONTEXT_GROWTH = "context_growth"
+    OMISSION = "omission"
+    TOPIC_DRIFT = "topic_drift"
+    BEHAVIOR_SHIFT = "behavior_shift"
+    FACT_LOSS = "fact_loss"
 
 
 class AnalysisRunStatus(StrEnum):
