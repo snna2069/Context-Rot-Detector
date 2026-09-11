@@ -1,0 +1,2 @@
+Alembic migration directory. The initial foundation has no application tables;
+domain schema migrations will be added in the session persistence phase.

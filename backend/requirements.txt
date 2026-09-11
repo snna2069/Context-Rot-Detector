@@ -13,6 +13,10 @@ pydantic_core==2.46.5
 python-dotenv==1.2.3
 PyYAML==6.0.3
 SQLAlchemy==2.0.52
+alembic==1.16.5
+httpx==0.28.1
+pytest==8.4.2
+ruff==0.13.0
 starlette==1.6.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
