@@ -58,12 +58,18 @@ client at `http://localhost:8000/health`.
 
 ## Database migrations
 
-The migration framework is configured, but Phase 1 intentionally has no
-application tables. When schema migrations are introduced:
+The Phase 2 domain migration creates the session, message,
+tool, snapshot, fact, detection, health, and analysis tables:
 
 ```powershell
 Set-Location backend
 .\.venv\Scripts\alembic.exe upgrade head
+```
+
+To load the small realistic development dataset after applying migrations:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.seed
 ```
 
 ## Checks

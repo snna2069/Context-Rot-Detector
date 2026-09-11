@@ -4,6 +4,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
+from app.models import Base
+
+__all__ = ["Base", "SessionLocal", "engine", "get_db"]
 
 engine = create_engine(
     get_settings().database_url,
