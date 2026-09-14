@@ -570,7 +570,116 @@ types respectively -- no new enum members or migration were needed.
   unit tests must not require a live LLM) -- `OpenAIAnalysisProvider`'s
   request/response handling is validated only against `httpx.MockTransport`.
 
-## 7. Explicit non-goals for now
+## 7. Phase 6 implementation: context health scoring
+
+### 7.1 Six configurable, explainable dimensions instead of one number
+
+`app/analysis/health.py` computes a `HealthScoreResult` with six
+sub-scores plus a weighted `overall_score`, each in `[0, 1]` where `1.0`
+means "no evidence of a problem in this dimension found by the
+detectors in this run":
+
+| Dimension                    | Detection types                              |
+| ----------------------------- | --------------------------------------------- |
+| `consistency`                 | `CONTRADICTION`                               |
+| `instruction_adherence`        | `INSTRUCTION_DRIFT`                           |
+| `information_retention`       | `FACT_LOSS`, `OMISSION`                       |
+| `relevance`                    | `TOPIC_DRIFT`, `REPETITION`                   |
+| `tool_utilization`             | `TOOL_RESULT_MISUSE`                          |
+| `hallucination_risk`          | `UNSUPPORTED_CLAIM` (Phase 5's claim-support pipeline) |
+
+`CONTEXT_GROWTH` and `BEHAVIOR_SHIFT` signals never penalize any
+dimension -- they remain purely informational, consistent with the rule
+that context length/growth alone is never treated as rot. "Contradiction
+frequency" is captured implicitly rather than as a separate column: each
+additional matching signal adds another penalty term, so more
+contradictions always score lower than one isolated contradiction.
+
+### 7.2 Weighting is configuration, not scattered constants
+
+`HealthScoreWeights` (in `app/analysis/health.py`) holds `penalty_per_signal`
+(the base cost of one matching signal, before confidence weighting) and
+`dimension_weights` (how much each dimension contributes to the overall
+weighted average). `HealthScoreWeights.from_settings()` builds this from
+new `HEALTH_*` environment variables in `app.config.Settings` (documented
+in `.env.example`), so the weighting scheme can be tuned per deployment
+without touching detector or scoring code. `compute_health_score()` and
+`AnalysisEngine` both accept an optional `HealthScoreWeights` and fall
+back to equal-weight defaults, so existing callers and tests are
+unaffected if they don't care about custom weighting.
+
+### 7.3 Hallucination risk is classification-aware, not just a signal count
+
+`ClaimSupportDetector` (Phase 5) always emits `UNSUPPORTED_CLAIM`
+regardless of which of its four evidence-based classifications produced
+the signal, recording the specific classification in
+`Signal.metadata["classification"]`. `compute_health_score` reads that
+metadata to scale the penalty: `unsupported` (1.0x) <
+`contradicted` (1.3x) < `possible_hallucination` (1.6x) <
+`high_confidence_hallucination` (2.0x). An unrecognized or missing
+classification falls back to the least severe multiplier, never the most
+severe -- consistent with the project's rule to never assume the worst
+without evidence.
+
+### 7.4 Trending "was this session getting worse as it became longer?"
+
+`app/analysis/health_trend.py` regresses `overall_score` against both
+checkpoint order and, where available, `AnalysisRun.input_sequence_end`
+(the number of messages analyzed at that checkpoint, used as the context-
+length proxy) using ordinary least squares -- no numerical library was
+added; it's a dozen lines of pure Python appropriate for a handful of
+points. It reports a `direction` (`improving` / `stable` / `degrading`)
+and an explicit `is_degrading_with_length` flag, with separate epsilon
+thresholds for the per-checkpoint and per-length slopes since they are
+measured in different units (score per run vs. score per message). This
+is deliberately simple: it is a trend indicator, not a statistical model
+with confidence intervals, and is documented as such in the module
+docstring.
+
+### 7.5 Explanations are derived from stored detection events, never generated
+
+`app/analysis/health_explain.py::explain_health_change` compares the
+`DetectionEvent.detection_type` counts of the two most recent analysis
+runs and reports only the categories whose count strictly increased, as
+plain-language bullets (e.g. "the contradiction rate increased",
+"previously established facts were ignored or lost"). Every bullet is
+directly traceable back to a concrete count delta -- there is no LLM
+involved in generating an explanation, so it can never invent a reason
+that isn't backed by the stored events.
+
+### 7.6 New endpoint and schema changes
+
+`GET /sessions/{id}/health-trend` (`app/api/analysis.py`) returns the
+trend plus the latest-change explanation in one response
+(`HealthTrendRead` in `app/schemas/analysis.py`). The `ContextHealthScore`
+table (migration `20260914_0002`) renames `evidence_coverage_score` to
+`tool_utilization_score` (it only ever measured tool-result misuse) and
+adds `information_retention_score` and `hallucination_risk_score`
+columns -- the first schema change since Phase 2's initial migration.
+
+### 7.7 Known limitations (tracked as technical debt)
+
+- The score is an engineering/prototype metric summarizing what the
+  detectors found in one run; it is not calibrated against any external
+  ground truth of "true" context quality, and the penalty/weight/
+  classification-multiplier defaults are reasoned, not empirically
+  tuned. This is documented directly in `app/analysis/health.py`'s module
+  docstring so it cannot be read as a validated scientific measurement.
+- `REPETITION` and `TOPIC_DRIFT` share the `relevance` dimension, and
+  `FACT_LOSS`/`OMISSION` share `information_retention`, rather than each
+  having its own column -- a deliberate scope tradeoff to keep the schema
+  and weighting configuration small; the brief's per-signal-type
+  dimensions are still fully recoverable from the underlying
+  `DetectionEvent` rows if finer granularity is ever needed.
+- Trend and length-correlation analysis require at least two analysis
+  runs; sessions analyzed only once report `"stable"` with an explicit
+  "not enough data" summary rather than guessing a direction.
+- The OLS regression has no outlier-robustness beyond its epsilon
+  thresholds -- a single severe anomaly in an otherwise short run of
+  checkpoints could still shift the reported slope more than a human
+  glancing at a chart would expect.
+
+## 8. Explicit non-goals for now
 
 Do not build these in Phase 0 or the first vertical slice:
 
@@ -593,7 +702,7 @@ Do not build these in Phase 0 or the first vertical slice:
 These may become appropriate later, but each requires a concrete latency,
 volume, compliance, or product requirement.
 
-## 8. Decision summary
+## 9. Decision summary
 
 The minimum viable architecture is a typed Next.js client over a modular
 FastAPI backend using PostgreSQL, with deterministic analysis first and an

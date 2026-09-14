@@ -123,7 +123,9 @@ def seed_development_data(db: Session) -> AgentSession:
             relevance_score=0.9,
             consistency_score=0.8,
             instruction_adherence_score=0.85,
-            evidence_coverage_score=0.65,
+            information_retention_score=0.9,
+            tool_utilization_score=0.65,
+            hallucination_risk_score=0.95,
             measured_at=started_at + timedelta(minutes=6),
         )
     )

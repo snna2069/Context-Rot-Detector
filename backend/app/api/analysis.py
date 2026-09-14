@@ -9,6 +9,8 @@ from app.schemas.analysis import (
     AnalysisRunResult,
     ContextHealthScoreRead,
     DetectionEventRead,
+    HealthChangeExplanationRead,
+    HealthTrendRead,
 )
 from app.services import analysis as analysis_service
 
@@ -48,3 +50,39 @@ def list_health_scores(
 ) -> list[ContextHealthScoreRead]:
     scores = analysis_service.list_health_scores(db, session_id)
     return [ContextHealthScoreRead.model_validate(score) for score in scores]
+
+
+@router.get("/{session_id}/health-trend", response_model=HealthTrendRead)
+def get_health_trend(
+    session_id: str, db: DBSession = Depends(get_db)
+) -> HealthTrendRead:
+    """Answers "was this session getting worse as it became longer?".
+
+    Combines the score trend across every stored checkpoint
+    (`app.analysis.health_trend`) with a plain-language explanation of
+    the most recent change (`app.analysis.health_explain`), both derived
+    directly from stored `ContextHealthScore`/`DetectionEvent` rows.
+    """
+    trend = analysis_service.get_health_trend(db, session_id)
+    explanation = analysis_service.explain_latest_health_change(db, session_id)
+    return HealthTrendRead(
+        direction=trend.direction,
+        slope_per_checkpoint=trend.slope_per_checkpoint,
+        slope_per_context_length=trend.slope_per_context_length,
+        is_degrading_with_length=trend.is_degrading_with_length,
+        summary=trend.summary,
+        points=[
+            {
+                "measured_at": p.measured_at,
+                "overall_score": p.overall_score,
+                "context_length": p.context_length,
+            }
+            for p in trend.points
+        ],
+        explanation=HealthChangeExplanationRead(
+            direction=explanation.direction,
+            score_delta=explanation.score_delta,
+            reasons=list(explanation.reasons),
+            headline=explanation.headline,
+        ),
+    )

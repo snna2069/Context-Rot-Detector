@@ -14,8 +14,16 @@ from sqlalchemy.orm import Session as DBSession
 from app.analysis.context import build_session_context
 from app.analysis.detectors import default_detectors
 from app.analysis.engine import AnalysisEngine
+from app.analysis.health import HealthScoreWeights
+from app.analysis.health_explain import HealthChangeExplanation, explain_health_change
+from app.analysis.health_trend import (
+    HealthTrendPoint,
+    HealthTrendResult,
+    analyze_health_trend,
+)
 from app.analysis.semantic import semantic_detectors
 from app.analysis.signals import Signal
+from app.config import get_settings
 from app.models import (
     AnalysisRun,
     AnalysisRunStatus,
@@ -37,13 +45,14 @@ from app.services.llm.provider import AnalysisProvider
 # `AnalysisRun`. Bump this string whenever detector logic changes in a
 # way that would make results non-comparable to earlier runs, so
 # `ContextHealthScore` history stays interpretable over time.
-ANALYSIS_VERSION = "deterministic-v1+semantic-v1"
+ANALYSIS_VERSION = "deterministic-v1+semantic-v1+health-v2"
 
 
 def run_analysis(
     db: DBSession,
     session_id: str,
     provider: AnalysisProvider | None = None,
+    weights: HealthScoreWeights | None = None,
 ) -> AnalysisRun:
     """Run the analysis engine against a session and persist the results.
 
@@ -59,6 +68,12 @@ def run_analysis(
     semantic detectors are always included, never conditionally skipped,
     because that fallback provider already guarantees they emit nothing
     without a real LLM behind them.
+
+    `weights` defaults to `HealthScoreWeights.from_settings(get_settings())`
+    so the relative weighting of each health dimension is configurable via
+    environment variables (see `app.config.Settings`) without requiring a
+    code change; tests and other callers may inject an explicit
+    `HealthScoreWeights` to exercise specific weighting scenarios.
     """
     session = get_session(db, session_id)
     messages = messages_repo.list_by_session(db, session_id)
@@ -67,8 +82,10 @@ def run_analysis(
 
     context = build_session_context(session_id, messages, tool_calls, tool_results)
     provider = provider or get_analysis_provider()
+    weights = weights or HealthScoreWeights.from_settings(get_settings())
     engine = AnalysisEngine(
-        detectors=[*default_detectors(), *semantic_detectors(provider)]
+        detectors=[*default_detectors(), *semantic_detectors(provider)],
+        weights=weights,
     )
     result = engine.run(context)
 
@@ -98,7 +115,11 @@ def run_analysis(
             instruction_adherence_score=(
                 result.health_score.instruction_adherence_score
             ),
-            evidence_coverage_score=result.health_score.evidence_coverage_score,
+            information_retention_score=(
+                result.health_score.information_retention_score
+            ),
+            tool_utilization_score=result.health_score.tool_utilization_score,
+            hallucination_risk_score=result.health_score.hallucination_risk_score,
             measured_at=utc_now(),
         ),
     )
@@ -154,3 +175,73 @@ def list_detection_events(db: DBSession, session_id: str) -> list[DetectionEvent
 def list_health_scores(db: DBSession, session_id: str) -> list[ContextHealthScore]:
     get_session(db, session_id)
     return analysis_repo.list_health_scores_by_session(db, session_id)
+
+
+def get_health_trend(db: DBSession, session_id: str) -> HealthTrendResult:
+    """Trend the session's health score across every analysis-run checkpoint.
+
+    Answers "was this session getting worse as it became longer?" by
+    regressing `overall_score` against both checkpoint order and, where
+    the underlying `AnalysisRun` recorded it, the number of messages
+    analyzed at each checkpoint (`context_length`). See
+    `app.analysis.health_trend` for the regression itself.
+    """
+    get_session(db, session_id)
+    # Stored newest-first; the trend must be computed oldest-first.
+    scores = list(reversed(analysis_repo.list_health_scores_by_session(db, session_id)))
+    points = [
+        HealthTrendPoint(
+            measured_at=score.measured_at,
+            overall_score=score.overall_score,
+            context_length=(
+                score.analysis_run.input_sequence_end
+                if score.analysis_run is not None
+                else None
+            ),
+        )
+        for score in scores
+    ]
+    return analyze_health_trend(points)
+
+
+def explain_latest_health_change(
+    db: DBSession, session_id: str
+) -> HealthChangeExplanation:
+    """Explain the most recent health-score change in plain language.
+
+    Compares the two most recent analysis runs' detection events (by
+    type) and reports which problem categories increased, per
+    `app.analysis.health_explain.explain_health_change`. Returns an
+    `"initial"` explanation when fewer than one analysis run exists yet.
+    """
+    get_session(db, session_id)
+    # Newest-first, as stored.
+    scores = analysis_repo.list_health_scores_by_session(db, session_id)
+    if not scores:
+        return explain_health_change(
+            current_overall_score=1.0,
+            current_detection_types=[],
+            previous_overall_score=None,
+        )
+
+    current = scores[0]
+    current_types = analysis_repo.list_detection_types_by_run(
+        db, current.analysis_run_id
+    )
+
+    if len(scores) < 2:
+        return explain_health_change(
+            current_overall_score=current.overall_score,
+            current_detection_types=current_types,
+        )
+
+    previous = scores[1]
+    previous_types = analysis_repo.list_detection_types_by_run(
+        db, previous.analysis_run_id
+    )
+    return explain_health_change(
+        current_overall_score=current.overall_score,
+        current_detection_types=current_types,
+        previous_overall_score=previous.overall_score,
+        previous_detection_types=previous_types,
+    )

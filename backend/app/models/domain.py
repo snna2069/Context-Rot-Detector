@@ -445,7 +445,9 @@ class ContextHealthScore(Base):
     relevance_score: Mapped[float | None] = mapped_column()
     consistency_score: Mapped[float | None] = mapped_column()
     instruction_adherence_score: Mapped[float | None] = mapped_column()
-    evidence_coverage_score: Mapped[float | None] = mapped_column()
+    information_retention_score: Mapped[float | None] = mapped_column()
+    tool_utilization_score: Mapped[float | None] = mapped_column()
+    hallucination_risk_score: Mapped[float | None] = mapped_column()
     measured_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

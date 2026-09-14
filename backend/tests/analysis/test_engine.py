@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.analysis.context import SessionContext
 from app.analysis.engine import AnalysisEngine
+from app.analysis.health import HealthScoreWeights
 from app.analysis.signals import Signal
 from app.models import DetectionSeverity, DetectionType, MessageRole
 from tests.analysis.helpers import make_context, make_message
@@ -65,3 +66,19 @@ def test_engine_is_resilient_to_a_failing_detector() -> None:
 
     assert len(result.signals) == 1
     assert result.signals[0].detector_name == "well_behaved"
+
+
+def test_engine_passes_custom_weights_through_to_health_scoring() -> None:
+    messages = [
+        make_message(1, MessageRole.ASSISTANT, "The deadline is March 15th."),
+        make_message(2, MessageRole.ASSISTANT, "The deadline is next Tuesday."),
+    ]
+    context = make_context(messages)
+    lenient = AnalysisEngine(weights=HealthScoreWeights(penalty_per_signal=0.01)).run(
+        context
+    )
+    harsh = AnalysisEngine(weights=HealthScoreWeights(penalty_per_signal=0.9)).run(
+        context
+    )
+
+    assert lenient.health_score.consistency_score > harsh.health_score.consistency_score

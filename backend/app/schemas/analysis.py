@@ -69,7 +69,9 @@ class ContextHealthScoreRead(BaseModel):
     relevance_score: float | None
     consistency_score: float | None
     instruction_adherence_score: float | None
-    evidence_coverage_score: float | None
+    information_retention_score: float | None
+    tool_utilization_score: float | None
+    hallucination_risk_score: float | None
     measured_at: datetime
 
 
@@ -93,3 +95,45 @@ class AnalysisRunResult(BaseModel):
     analysis_run: AnalysisRunRead
     detection_events: list[DetectionEventRead]
     health_score: ContextHealthScoreRead | None
+
+
+class HealthTrendPointRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    measured_at: datetime
+    overall_score: float
+    context_length: int | None
+
+
+class HealthChangeExplanationRead(BaseModel):
+    """Reasons behind the most recent health-score change.
+
+    `reasons` lists only categories whose detection-event count strictly
+    increased between the two most recent analysis runs; it is always a
+    subset of, and traceable back to, the underlying `DetectionEvent` rows
+    -- never a free-form LLM summary.
+    """
+
+    direction: str
+    score_delta: float | None
+    reasons: list[str]
+    headline: str
+
+
+class HealthTrendRead(BaseModel):
+    """Response for `GET /sessions/{id}/health-trend`.
+
+    `direction` and `summary` are derived, not independently verified,
+    from a simple linear trend over the session's own recorded
+    checkpoints -- see `app.analysis.health_trend` for the (deliberately
+    simple, non-statistical) regression that produces them. `explanation`
+    covers only the most recent checkpoint-to-checkpoint change.
+    """
+
+    direction: str
+    slope_per_checkpoint: float
+    slope_per_context_length: float | None
+    is_degrading_with_length: bool
+    summary: str
+    points: list[HealthTrendPointRead]
+    explanation: HealthChangeExplanationRead

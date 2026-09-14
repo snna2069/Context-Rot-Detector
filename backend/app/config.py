@@ -32,6 +32,34 @@ class Settings(BaseSettings):
         default=20.0, validation_alias="LLM_TIMEOUT_SECONDS"
     )
 
+    # Context-health scoring (Phase 6). These are deliberately configurable
+    # rather than hard-coded in `app.analysis.health`, so the relative
+    # importance of each dimension (or how harshly a single signal is
+    # penalized) can be tuned per deployment/environment without a code
+    # change or redeploy of the detectors themselves. See
+    # `app.analysis.health.HealthScoreWeights` for how these are consumed.
+    health_penalty_per_signal: float = Field(
+        default=0.15, validation_alias="HEALTH_PENALTY_PER_SIGNAL"
+    )
+    health_weight_consistency: float = Field(
+        default=1.0, validation_alias="HEALTH_WEIGHT_CONSISTENCY"
+    )
+    health_weight_instruction_adherence: float = Field(
+        default=1.0, validation_alias="HEALTH_WEIGHT_INSTRUCTION_ADHERENCE"
+    )
+    health_weight_information_retention: float = Field(
+        default=1.0, validation_alias="HEALTH_WEIGHT_INFORMATION_RETENTION"
+    )
+    health_weight_relevance: float = Field(
+        default=1.0, validation_alias="HEALTH_WEIGHT_RELEVANCE"
+    )
+    health_weight_tool_utilization: float = Field(
+        default=1.0, validation_alias="HEALTH_WEIGHT_TOOL_UTILIZATION"
+    )
+    health_weight_hallucination_risk: float = Field(
+        default=1.0, validation_alias="HEALTH_WEIGHT_HALLUCINATION_RISK"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

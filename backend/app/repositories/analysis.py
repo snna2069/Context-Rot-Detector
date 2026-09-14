@@ -9,6 +9,7 @@ from app.models import (
     ContextHealthScore,
     DetectionEvent,
     DetectionEvidence,
+    DetectionType,
 )
 
 
@@ -81,5 +82,22 @@ def list_health_scores_by_session(
         select(ContextHealthScore)
         .where(ContextHealthScore.session_id == session_id)
         .order_by(ContextHealthScore.measured_at.desc())
+        .options(selectinload(ContextHealthScore.analysis_run))
+    )
+    return list(db.scalars(stmt))
+
+
+def list_detection_types_by_run(
+    db: DBSession, analysis_run_id: str
+) -> list[DetectionType]:
+    """The `detection_type` of every event from one analysis run.
+
+    Used by `app.analysis.health_explain` to compare how many signals of
+    each type fired in one run versus the previous one -- deliberately
+    just the types (not full rows), since that is all the explanation
+    logic needs.
+    """
+    stmt = select(DetectionEvent.detection_type).where(
+        DetectionEvent.analysis_run_id == analysis_run_id
     )
     return list(db.scalars(stmt))
