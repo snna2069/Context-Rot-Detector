@@ -12,7 +12,9 @@ from __future__ import annotations
 from sqlalchemy.orm import Session as DBSession
 
 from app.analysis.context import build_session_context
+from app.analysis.detectors import default_detectors
 from app.analysis.engine import AnalysisEngine
+from app.analysis.semantic import semantic_detectors
 from app.analysis.signals import Signal
 from app.models import (
     AnalysisRun,
@@ -28,20 +30,35 @@ from app.repositories import messages as messages_repo
 from app.repositories import tool_calls as tool_calls_repo
 from app.repositories import tool_results as tool_results_repo
 from app.services.ingestion import get_session
+from app.services.llm.factory import get_analysis_provider
+from app.services.llm.provider import AnalysisProvider
 
-# Identifies which version of the deterministic detector set produced a
-# given `AnalysisRun`. Bump this string whenever detector logic changes in
-# a way that would make results non-comparable to earlier runs, so
+# Identifies which version of the detector set produced a given
+# `AnalysisRun`. Bump this string whenever detector logic changes in a
+# way that would make results non-comparable to earlier runs, so
 # `ContextHealthScore` history stays interpretable over time.
-ANALYSIS_VERSION = "deterministic-v1"
+ANALYSIS_VERSION = "deterministic-v1+semantic-v1"
 
 
-def run_analysis(db: DBSession, session_id: str) -> AnalysisRun:
+def run_analysis(
+    db: DBSession,
+    session_id: str,
+    provider: AnalysisProvider | None = None,
+) -> AnalysisRun:
     """Run the analysis engine against a session and persist the results.
 
-    Runs synchronously: every detector is a fast, deterministic, in-memory
-    function with no LLM or network calls, so no background job queue is
-    needed for this first version.
+    Runs synchronously. The deterministic detectors are fast, in-memory,
+    and have no LLM/network calls; the semantic detectors (see
+    `app.analysis.semantic`) do call out to `provider`, but each is
+    already isolated by the engine's per-detector exception handling and
+    bounded by small lookback/lookahead windows, so no background job
+    queue is needed for this version either.
+
+    `provider` defaults to `get_analysis_provider()`, which resolves to
+    the safe `UnavailableAnalysisProvider` when no LLM is configured --
+    semantic detectors are always included, never conditionally skipped,
+    because that fallback provider already guarantees they emit nothing
+    without a real LLM behind them.
     """
     session = get_session(db, session_id)
     messages = messages_repo.list_by_session(db, session_id)
@@ -49,7 +66,11 @@ def run_analysis(db: DBSession, session_id: str) -> AnalysisRun:
     tool_results = tool_results_repo.list_by_session(db, session_id)
 
     context = build_session_context(session_id, messages, tool_calls, tool_results)
-    result = AnalysisEngine().run(context)
+    provider = provider or get_analysis_provider()
+    engine = AnalysisEngine(
+        detectors=[*default_detectors(), *semantic_detectors(provider)]
+    )
+    result = engine.run(context)
 
     analysis_run = AnalysisRun(
         session_id=session.id,

@@ -475,7 +475,102 @@ event remains authoritative.
 Confidence expresses analysis confidence, not truth in the external world.
 The UI and API must preserve that distinction.
 
-## 6. Explicit non-goals for now
+## 6. Phase 5 implementation: semantic/LLM analysis layer
+
+This section documents what was actually built in Phase 5, as the
+concrete realization of the abstraction described in section 5.
+
+### 6.1 Where the code lives
+
+- `app/services/llm/` -- the provider-neutral abstraction and its
+  concrete implementations. `provider.py` defines the `AnalysisProvider`
+  `Protocol` (six narrow methods, one per analysis task from section
+  5.2). `types.py` defines every result dataclass and the
+  `EvidenceClassification` enum. `unavailable.py` and `openai_provider.py`
+  are the two concrete providers; `factory.py` picks between them based
+  on `Settings.llm_api_key`. Nothing outside this package imports an LLM
+  SDK or a provider-specific type.
+- `app/analysis/semantic/` -- consumes `AnalysisProvider` to add semantic
+  detectors and the hallucination-risk pipeline, parallel to (not
+  replacing) `app/analysis/detectors/`.
+
+### 6.2 Why `httpx` and not a vendor SDK
+
+`httpx` was already a transitive dependency (via FastAPI's `TestClient`).
+`OpenAIAnalysisProvider` calls a single `/chat/completions`-shaped HTTP
+endpoint, so no additional SDK earns its keep -- the same code works
+against OpenAI, Azure OpenAI-compatible endpoints, or a self-hosted
+OpenAI-compatible server, by changing only `LLM_BASE_URL`.
+
+### 6.3 Why an "Unavailable" provider instead of an `if llm_configured` branch
+
+`UnavailableAnalysisProvider` is a Null Object, not fake AI: every method
+returns an honest, zero-confidence result. Every semantic detector already
+requires a minimum provider confidence before emitting a signal, so wiring
+this provider in makes the semantic detectors run and safely emit nothing.
+This means `app/services/analysis.py` never needs to ask "is a real LLM
+configured?" -- the safety is structural (a confidence threshold), not a
+conditional code path that could be forgotten or bypassed.
+
+### 6.4 The hallucination-risk pipeline is not a single LLM call
+
+`app/analysis/semantic/hallucination.py::assess_hallucination_risk` is the
+concrete implementation of the pipeline in section 5.3. It is the *only*
+place in the codebase that can produce a `POSSIBLE_HALLUCINATION` or
+`HIGH_CONFIDENCE_HALLUCINATION` classification:
+
+1. `provider.extract_important_facts(claim)` -- ask only "what claims does
+   this contain?", never "is this true?".
+2. `provider.assess_claim_support(fact, evidence)` -- ask only "does this
+   evidence support/contradict/say nothing about this fact?", restricted
+   at the type level (`ClaimSupportResult.__post_init__`) to the four
+   evidence-only classifications. A provider cannot construct a result
+   labelled as a hallucination-risk classification even if a model
+   ignores its prompt and tries to.
+3. A deterministic Python function (`_aggregate`) combines the per-fact
+   results by priority (contradiction > unsupported > supported >
+   insufficient) with fixed confidence rules -- **not** another LLM call
+   -- into the final classification.
+
+"No evidence provided" is treated as a *confident* `INSUFFICIENT_EVIDENCE`
+result (confidence 1.0): certainty that nothing exists to check the claim
+against, which is a different kind of confidence than "confidence the
+claim itself is true or false" -- this pipeline never asserts the latter.
+
+### 6.5 Semantic detectors reuse existing `DetectionType` values
+
+`SemanticContradictionDetector`, `SemanticInstructionDriftDetector`,
+`SemanticRelevanceDetector`, and `ClaimSupportDetector` all conform to the
+same `Detector` protocol from Phase 4 (`app/analysis/base.py`) with zero
+changes to it or to `AnalysisEngine`; only their constructors differ (they
+take an `AnalysisProvider`). They emit the pre-existing `CONTRADICTION`,
+`INSTRUCTION_DRIFT`, `TOPIC_DRIFT`, and `UNSUPPORTED_CLAIM` detection
+types respectively -- no new enum members or migration were needed.
+`UNSUPPORTED_CLAIM` was also added to health scoring's
+`_EVIDENCE_COVERAGE_TYPES` set alongside the existing
+`TOOL_RESULT_MISUSE`.
+
+### 6.6 Known limitations (tracked as technical debt)
+
+- All comparisons use small, bounded lookback/lookahead windows (a few
+  messages) rather than exhaustive all-pairs comparison, to bound
+  per-analysis-run LLM call volume and latency. Long-range relationships
+  outside the window are missed.
+- The aggregation thresholds in `hallucination.py` (e.g. the 0.75
+  high-confidence-contradiction cutoff, the 0.7 possible-hallucination
+  cap) are reasoned defaults, not calibrated against real-world labeled
+  data.
+- Provider/model identity is recorded in `Signal.metadata`, not a
+  dedicated `DetectionEvent` column -- consistent with how detector
+  metadata was already handled in Phase 4, but a real schema change if
+  the UI ever needs to query/filter by it directly.
+- `OpenAIAnalysisProvider` has no retry/backoff logic; a transient network
+  failure surfaces as a skipped signal for that call, not a retried one.
+- There is no live-API test coverage (by design, per the instruction that
+  unit tests must not require a live LLM) -- `OpenAIAnalysisProvider`'s
+  request/response handling is validated only against `httpx.MockTransport`.
+
+## 7. Explicit non-goals for now
 
 Do not build these in Phase 0 or the first vertical slice:
 
@@ -498,7 +593,7 @@ Do not build these in Phase 0 or the first vertical slice:
 These may become appropriate later, but each requires a concrete latency,
 volume, compliance, or product requirement.
 
-## 7. Decision summary
+## 8. Decision summary
 
 The minimum viable architecture is a typed Next.js client over a modular
 FastAPI backend using PostgreSQL, with deterministic analysis first and an
