@@ -6,6 +6,7 @@ import { orNotFound } from "@/lib/api/client";
 import { SeverityBadge } from "@/components/SeverityBadge";
 import { NotVerifiedTag } from "@/components/NotVerifiedTag";
 import { detectionTypeLabel } from "@/components/DetectionEventCard";
+import { ArrowLeftIcon, ChatBubbleIcon, InformationCircleIcon, ListIcon } from "@/components/icons";
 import {
   formatScorePercent,
   formatTimestamp,
@@ -43,12 +44,25 @@ export default async function DetectionEventDetailPage({
     <div className="space-y-6">
       <Link
         href={`/sessions/${sessionId}/events`}
-        className="text-sm text-slate-500 hover:underline"
+        className="inline-flex items-center gap-1.5 text-sm text-slate-500 transition hover:text-indigo-600"
       >
-        ← Back to detection events
+        <ArrowLeftIcon className="h-4 w-4" />
+        Back to detection events
       </Link>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div
+          className={`h-1.5 w-full ${
+            event.severity === "critical"
+              ? "bg-gradient-to-r from-red-500 to-red-400"
+              : event.severity === "high"
+                ? "bg-gradient-to-r from-orange-500 to-orange-400"
+                : event.severity === "medium"
+                  ? "bg-gradient-to-r from-amber-500 to-amber-400"
+                  : "bg-gradient-to-r from-blue-400 to-slate-300"
+          }`}
+        />
+        <div className="p-6">
         <div className="flex flex-wrap items-center gap-2">
           <SeverityBadge severity={event.severity} />
           <h1 className="text-xl font-semibold text-slate-900">
@@ -71,16 +85,21 @@ export default async function DetectionEventDetailPage({
           {event.explanation}
         </p>
         {typeof externalVerification === "boolean" && !externalVerification ? (
-          <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          <p className="mt-3 flex gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            <InformationCircleIcon className="mt-0.5 h-3.5 w-3.5 flex-none text-slate-400" />
             No external verification was available for this claim -- this
             detection is based solely on comparing statements within this
             session.
           </p>
         ) : null}
+        </div>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="font-medium text-slate-900">Evidence</h2>
+        <h2 className="inline-flex items-center gap-2 font-medium text-slate-900">
+          <ListIcon className="h-4 w-4 text-indigo-500" />
+          Evidence
+        </h2>
         {event.evidence.length === 0 ? (
           <p className="mt-2 text-sm text-slate-500">
             No structured evidence records were attached to this event.
@@ -107,7 +126,10 @@ export default async function DetectionEventDetailPage({
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="font-medium text-slate-900">Source messages</h2>
+        <h2 className="inline-flex items-center gap-2 font-medium text-slate-900">
+          <ChatBubbleIcon className="h-4 w-4 text-indigo-500" />
+          Source messages
+        </h2>
         {event.related_message_ids.length === 0 ? (
           <p className="mt-2 text-sm text-slate-500">
             No specific source messages were linked to this event.

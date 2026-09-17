@@ -4,6 +4,7 @@ import { orNotFound } from "@/lib/api/client";
 import { EmptyState } from "@/components/EmptyState";
 import { SeverityBadge } from "@/components/SeverityBadge";
 import { NotVerifiedTag } from "@/components/NotVerifiedTag";
+import { ChevronRightIcon, ExclamationTriangleIcon } from "@/components/icons";
 import {
   compareClassificationSeverity,
   formatScorePercent,
@@ -38,20 +39,23 @@ export default async function SessionHallucinationsPage({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <p className="font-medium">
-          These are automated, evidence-based classifications -- not
-          confirmed facts.
-        </p>
-        <p className="mt-1 text-amber-800">
-          This system has no external fact-checking oracle. Every item below
-          is derived from comparing an agent claim against evidence
-          available within this session (or the absence of it). Even a
-          &quot;high-confidence hallucination&quot; label is a probabilistic
-          estimate, not an independently verified determination -- there is
-          currently no mechanism in this system that produces a
-          &quot;verified hallucination&quot; status.
-        </p>
+      <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-none text-amber-500" />
+        <div>
+          <p className="font-medium">
+            These are automated, evidence-based classifications -- not
+            confirmed facts.
+          </p>
+          <p className="mt-1 text-amber-800">
+            This system has no external fact-checking oracle. Every item below
+            is derived from comparing an agent claim against evidence
+            available within this session (or the absence of it). Even a
+            &quot;high-confidence hallucination&quot; label is a probabilistic
+            estimate, not an independently verified determination -- there is
+            currently no mechanism in this system that produces a
+            &quot;verified hallucination&quot; status.
+          </p>
+        </div>
       </div>
 
       {claimEvents.length === 0 ? (
@@ -69,7 +73,7 @@ export default async function SessionHallucinationsPage({
                   <h2 className="font-medium text-slate-900">
                     {hallucinationClassificationLabels[classification]}
                   </h2>
-                  <span className="text-xs text-slate-400">
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
                     {items.length} item{items.length === 1 ? "" : "s"}
                   </span>
                   <NotVerifiedTag />
@@ -79,20 +83,21 @@ export default async function SessionHallucinationsPage({
                     <Link
                       key={event.id}
                       href={`/sessions/${sessionId}/events/${event.id}`}
-                      className="block rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow"
+                      className="group flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                     >
-                      <div className="flex items-center justify-between gap-4">
-                        <SeverityBadge severity={event.severity} />
-                        <div className="flex items-center gap-3 text-xs text-slate-500">
-                          <span>
-                            Confidence {formatScorePercent(event.confidence)}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <SeverityBadge severity={event.severity} />
+                          <span className="text-xs text-slate-500">
+                            Confidence {formatScorePercent(event.confidence)} ·{" "}
+                            {formatTimestamp(event.timestamp)}
                           </span>
-                          <span>{formatTimestamp(event.timestamp)}</span>
                         </div>
+                        <p className="mt-2 text-sm text-slate-600">
+                          {event.explanation}
+                        </p>
                       </div>
-                      <p className="mt-2 text-sm text-slate-600">
-                        {event.explanation}
-                      </p>
+                      <ChevronRightIcon className="h-4 w-4 flex-none text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-indigo-500" />
                     </Link>
                   ))}
                 </div>

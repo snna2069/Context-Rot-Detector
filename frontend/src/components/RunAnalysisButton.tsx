@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { analyzeSession } from "@/lib/api/analysis";
 import { ApiError } from "@/lib/api/client";
+import { BoltIcon, SpinnerIcon } from "@/components/icons";
 
 export function RunAnalysisButton({ sessionId }: { sessionId: string }) {
   const router = useRouter();
@@ -31,8 +32,13 @@ export function RunAnalysisButton({ sessionId }: { sessionId: string }) {
       <button
         onClick={handleClick}
         disabled={isPending}
-        className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-slate-900 to-slate-700 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:from-slate-800 hover:to-slate-600 hover:shadow disabled:cursor-not-allowed disabled:opacity-60"
       >
+        {isPending ? (
+          <SpinnerIcon className="h-4 w-4" />
+        ) : (
+          <BoltIcon className="h-4 w-4" />
+        )}
         {isPending ? "Running analysis…" : "Run analysis"}
       </button>
       {error ? <p className="max-w-xs text-right text-xs text-red-600">{error}</p> : null}
