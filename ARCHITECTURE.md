@@ -776,6 +776,44 @@ session ID and an unknown event ID within a known session.
   the most recent completed `AnalysisRun`. A user must click "Run analysis"
   (or an external caller must invoke the API) to see fresher data.
 
+### 8.7 Visual polish pass (post-Phase-7)
+
+After the initial dashboard was functional, a follow-up pass addressed
+"the UI feels boring" without touching data flow or adding dependencies:
+
+- A shared inline SVG icon set (`src/components/icons.tsx`, ~20 icons) was
+  added instead of an icon package (e.g. `lucide-react`/`heroicons`) --
+  the icon set needed is small and fixed, so a dependency would add
+  install/version-drift cost with no functional benefit over a single
+  hand-written file.
+- Badges (`SeverityBadge`, `StatusBadge`, `ScoreBadge`) gained colored status
+  dots and ring borders instead of solid ones; critical/active states get a
+  subtle CSS pulse. This is purely presentational -- the underlying
+  severity/status/score values and thresholds are unchanged.
+- The sessions list gained a stats strip (session count, active count,
+  average health, total detections) computed from the already-fetched
+  `listSessionOverviews` response. No new endpoint or fabricated numbers
+  were introduced, consistent with the "no hard-coded production data" rule.
+- The session hero (`[sessionId]/layout.tsx`) gained a status-colored
+  gradient accent bar via a `Record<SessionStatus, string>` lookup, matching
+  the existing lookup-table convention used for badge coloring.
+- The timeline became a connected vertical timeline (a single CSS
+  pseudo-element line, no extra DOM nodes or diagram library) with per-role
+  avatar icons; tool calls render as dark "terminal" blocks instead of plain
+  white boxes.
+- `HealthTrendChart` gained a gradient fill under the line and rounder
+  point styling; `HealthDimensionBreakdown` gained a per-dimension icon and
+  gradient progress bars. No charting library was added (see 8.3 -- the
+  reasoning still applies).
+- Detection event cards gained a left severity-accent bar, and the
+  severity filter went from a plain `<select>` to pill-style toggle buttons;
+  the detection type filter remains a `<select>` since its option set is
+  open-ended and unbounded.
+
+No new npm dependencies were added for any of the above. `npm run lint`,
+`npm run build`, and `npm test` (11/11) were re-run clean after this pass,
+and all five dashboard views were re-verified against a live seeded backend.
+
 ## 9. Explicit non-goals for now
 
 Do not build these in Phase 0 or the first vertical slice:

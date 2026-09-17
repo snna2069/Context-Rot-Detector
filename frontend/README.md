@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Context Rot Detector -- frontend
 
-## Getting Started
+Next.js (App Router) + React + TypeScript + Tailwind dashboard for the
+Context Rot Detector backend. For overall project context, setup from the
+repository root, and architectural decisions, see the top-level
+[`README.md`](../README.md) and [`ARCHITECTURE.md`](../ARCHITECTURE.md).
 
-First, run the development server:
+## Development
 
-```bash
+```powershell
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). The app expects the
+backend to be running (see the root README) and reads its base URL from
+`NEXT_PUBLIC_API_BASE_URL` (see `.env.example`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `src/app/` -- routes: sessions list (`/`), and per-session timeline,
+  context health, detection events, and hallucination analysis pages under
+  `sessions/[sessionId]/`.
+- `src/lib/api/` -- the only layer that knows backend endpoint paths and
+  response shapes (typed client + types mirroring the backend Pydantic
+  schemas field-for-field).
+- `src/lib/format/` -- pure, unit-tested formatting/presentation helpers
+  (severity/score labels, timestamp/duration formatting, sorting). No JSX,
+  no fetching.
+- `src/components/` -- presentational components (badges, cards, charts,
+  the shared inline SVG icon set in `icons.tsx`) that take already-typed
+  domain data as props.
 
-## Learn More
+## Checks
 
-To learn more about Next.js, take a look at the following resources:
+```powershell
+npm run lint
+npm run build
+npm test
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`npm test` runs the Vitest suite for `src/lib/format`.
