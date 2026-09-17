@@ -46,6 +46,9 @@ def test_analyze_session_persists_and_returns_detected_contradiction(
     assert 0.0 < event["confidence"] <= 0.85
     assert len(event["related_message_ids"]) == 2
     assert len(event["evidence"]) == 2
+    # Deterministic detectors also attach useful contextual metadata (e.g.
+    # `external_verification_available`) -- it must be exposed, not lost.
+    assert event["metadata"]["external_verification_available"] is False
 
     # Results must be independently retrievable afterward, not just
     # returned inline from the /analyze call.

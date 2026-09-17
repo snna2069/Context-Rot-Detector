@@ -9,6 +9,7 @@ callers do not supply analysis parameters in this first version.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -41,21 +42,32 @@ class DetectionEventRead(BaseModel):
     timestamp: datetime
     evidence: list[DetectionEvidenceRead] = []
     related_message_ids: list[str] = []
+    metadata: dict[str, Any] = {}
 
     @staticmethod
     def from_orm_event(event) -> DetectionEventRead:  # noqa: ANN001
-        """Build the response model, flattening `related_messages` to IDs.
+        """Build the response model explicitly rather than via `model_validate`.
 
-        Kept as an explicit adapter (rather than a plain `model_validate`)
-        because `related_message_ids` is derived from a relationship of
-        full `Message` objects, not a column that `from_attributes` can
-        pick up automatically.
+        Two fields cannot be picked up automatically by
+        `from_attributes`: `related_message_ids` is derived from a
+        relationship of full `Message` objects, and the persisted
+        metadata column is named `event_metadata` in Python (to avoid
+        colliding with SQLAlchemy's own `Base.metadata` class attribute,
+        which would otherwise shadow it and break naive attribute
+        lookup) but is exposed to API consumers simply as `metadata`.
         """
-        read = DetectionEventRead.model_validate(event)
-        return read.model_copy(
-            update={
-                "related_message_ids": [m.id for m in event.related_messages],
-            }
+        return DetectionEventRead(
+            id=event.id,
+            session_id=event.session_id,
+            analysis_run_id=event.analysis_run_id,
+            detection_type=event.detection_type,
+            severity=event.severity,
+            confidence=event.confidence,
+            explanation=event.explanation,
+            timestamp=event.timestamp,
+            evidence=[DetectionEvidenceRead.model_validate(e) for e in event.evidence],
+            related_message_ids=[m.id for m in event.related_messages],
+            metadata=dict(event.event_metadata),
         )
 
 

@@ -40,3 +40,19 @@ def list_by_session(db: DBSession, session_id: str) -> list[Message]:
         .order_by(Message.sequence_number)
     )
     return list(db.scalars(stmt))
+
+
+def count_by_sessions(db: DBSession, session_ids: list[str]) -> dict[str, int]:
+    """Message count per session, in one query instead of one-per-session.
+
+    Used by the dashboard's session list, which needs a lightweight
+    per-session summary for a whole page of sessions at once.
+    """
+    if not session_ids:
+        return {}
+    stmt = (
+        select(Message.session_id, func.count(Message.id))
+        .where(Message.session_id.in_(session_ids))
+        .group_by(Message.session_id)
+    )
+    return dict(db.execute(stmt).all())

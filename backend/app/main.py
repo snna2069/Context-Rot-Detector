@@ -4,7 +4,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import analysis_router, sessions_router
+from app.api import analysis_router, dashboard_router, sessions_router
 from app.config import get_settings
 from app.errors import ConflictError, NotFoundError
 
@@ -84,6 +84,7 @@ async def unhandled_exception_handler(
 
 app.include_router(sessions_router)
 app.include_router(analysis_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/health")

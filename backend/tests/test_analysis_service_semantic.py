@@ -15,9 +15,17 @@ from sqlalchemy.pool import StaticPool
 from app.models import Base, DetectionType, MessageRole
 from app.schemas.messages import MessageCreate
 from app.schemas.sessions import AgentSessionCreate
+from app.schemas.tool_calls import ToolCallCreate
+from app.schemas.tool_results import ToolResultCreate
 from app.services import analysis as analysis_service
 from app.services import ingestion
-from app.services.llm.types import RelevanceResult
+from app.services.llm.types import (
+    ClaimSupportResult,
+    EvidenceClassification,
+    ExtractedFact,
+    ImportantFactsResult,
+    RelevanceResult,
+)
 from tests.llm.fake_provider import ScriptedAnalysisProvider, result
 
 
@@ -86,3 +94,60 @@ def test_run_analysis_defaults_to_unavailable_provider_without_error(
     run = analysis_service.run_analysis(db, session.id)
 
     assert run.status == "completed"
+
+
+def test_run_analysis_persists_hallucination_classification_metadata(
+    db: Session,
+) -> None:
+    """The evidence-based classification behind an `UNSUPPORTED_CLAIM`
+    signal must survive a full round trip through the database -- not
+    just exist transiently on the in-memory `Signal` -- since the
+    dashboard's hallucination-analysis view reads it back from stored
+    `DetectionEvent` rows, never recomputes it."""
+    session = ingestion.create_session(db, AgentSessionCreate(name="hallucination-md"))
+    claim = "The server has 99.999% uptime this month."
+    ingestion.add_message(
+        db, session.id, MessageCreate(role=MessageRole.ASSISTANT, content="checking")
+    )
+    tool_message = ingestion.list_messages(db, session.id)[0]
+    tool_call = ingestion.add_tool_call(
+        db,
+        session.id,
+        tool_message.id,
+        ToolCallCreate(tool_name="get_uptime", arguments={}),
+    )
+    ingestion.add_tool_result(
+        db,
+        session.id,
+        tool_call.id,
+        ToolResultCreate(output={"uptime_percent": 97.2}),
+    )
+    ingestion.add_message(
+        db, session.id, MessageCreate(role=MessageRole.ASSISTANT, content=claim)
+    )
+
+    provider = ScriptedAnalysisProvider(
+        facts_by_text={
+            claim: ImportantFactsResult(
+                facts=(ExtractedFact(text="server has 99.999% uptime this month"),),
+                **result(0.9),
+            )
+        },
+        claim_support_by_claim={
+            "server has 99.999% uptime this month": ClaimSupportResult(
+                classification=EvidenceClassification.UNSUPPORTED,
+                **result(0.8),
+            ),
+        },
+    )
+
+    analysis_service.run_analysis(db, session.id, provider=provider)
+
+    events = analysis_service.list_detection_events(db, session.id)
+    unsupported_events = [
+        e for e in events if e.detection_type == DetectionType.UNSUPPORTED_CLAIM
+    ]
+    assert len(unsupported_events) == 1
+    assert unsupported_events[0].event_metadata["classification"] == (
+        "possible_hallucination"
+    )

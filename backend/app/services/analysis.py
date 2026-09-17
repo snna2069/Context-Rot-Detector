@@ -145,6 +145,7 @@ def _persist_signal(
         confidence=signal.confidence,
         explanation=signal.explanation,
         timestamp=utc_now(),
+        event_metadata=dict(signal.metadata),
     )
     detection_event.related_messages = [
         messages_by_id[message_id]

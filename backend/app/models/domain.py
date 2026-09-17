@@ -381,6 +381,15 @@ class DetectionEvent(Base):
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+    # Carries detector-specific detail that doesn't warrant its own column,
+    # most notably the Phase 5 semantic layer's `classification` (one of
+    # the six evidence-based hallucination-risk categories) and
+    # `provider`/`model`. Column name "metadata" collides with
+    # `Base.metadata`, so it is exposed as `event_metadata` in Python, same
+    # pattern as `ImportantFact.fact_metadata`.
+    event_metadata: Mapped[dict] = mapped_column(
+        "metadata", JSON, default=dict, nullable=False
+    )
 
     session: Mapped[AgentSession] = relationship(back_populates="detection_events")
     analysis_run: Mapped[AnalysisRun] = relationship(back_populates="detection_events")
