@@ -679,7 +679,104 @@ columns -- the first schema change since Phase 2's initial migration.
   checkpoints could still shift the reported slope more than a human
   glancing at a chart would expect.
 
-## 8. Explicit non-goals for now
+## 8. Phase 7 implementation: context rot dashboard
+
+### 8.1 Route structure mirrors the domain, not a generic CMS shape
+
+The dashboard is a Next.js App Router application with one route family per
+Phase 6 concept, not a single monolithic "session view":
+
+- `/` -- sessions list (backed by the new `GET /dashboard/sessions`
+  aggregation endpoint from the Phase 6 segment).
+- `/sessions/[sessionId]` -- timeline (messages, tool calls/results, ordered).
+- `/sessions/[sessionId]/health` -- context health over time (trend chart +
+  latest dimension breakdown + stored explanation).
+- `/sessions/[sessionId]/events` -- detection events, client-side filterable
+  by type/severity.
+- `/sessions/[sessionId]/events/[eventId]` -- single detection event detail
+  (evidence, source messages, explanation).
+- `/sessions/[sessionId]/hallucinations` -- hallucination classifications
+  grouped by risk, with an explicit "not independently verified" banner.
+
+`layout.tsx` under `[sessionId]` owns the session header, tab navigation, and
+the "Run analysis" action; each tab page only fetches what it displays. This
+keeps the domain-vs-API-route separation from Phase 3/4 intact on the
+frontend: `src/lib/api/*` is the only place that knows endpoint paths and
+response shapes, `src/lib/format` is pure, testable presentation logic, and
+components take already-typed domain data as props.
+
+### 8.2 No transform layer between backend schemas and frontend types
+
+`src/lib/api/types.ts` mirrors the backend Pydantic response schemas
+field-for-field (snake_case, same enum values). A camelCase transform layer
+was deliberately not introduced: it would be a second place the two systems
+could silently drift apart, for a purely cosmetic naming preference. Each
+type was checked against the actual schema source files rather than the
+OpenAPI docs, to avoid re-deriving mismatches from documentation drift.
+
+### 8.3 No charting library
+
+`HealthTrendChart` (line chart with healthy/watch/concerning reference
+bands) and `HealthDimensionBreakdown` (per-dimension bars) are hand-rolled
+SVG/CSS, not Recharts/Chart.js/D3. Per session, the data is small and bounded
+(one point per analysis run, six dimensions), and the visuals needed are
+simple lines and bars with threshold coloring that already exists as
+`ScoreBadge` logic. A charting library would be a real dependency addition
+with no corresponding requirement it uniquely solves.
+
+### 8.4 Hallucination UI: honesty over a fake "verified" state
+
+The system has no fact-checking oracle, so there is no `VERIFIED_HALLUCINATION`
+status anywhere in the domain model. Phase 7's brief to "clearly distinguish
+potential from verified hallucination" is satisfied by UI copy and a
+`NotVerifiedTag` component that state the limitation directly, rather than by
+inventing a verified-state enum value the backend could never actually
+populate. Classifications are grouped from most to least concerning:
+`high_confidence_hallucination` -> `contradicted` -> `possible_hallucination`
+-> `unsupported` -> `insufficient_evidence` -> `supported`.
+
+### 8.5 `notFound()` boundary resolution for session-scoped routes
+
+Every tab under `/sessions/[sessionId]` fetches session-scoped data
+independently (the layout and the active page render concurrently as
+separate Server Components), so an unknown session ID must be handled
+consistently regardless of which fetch notices it first. `orNotFound()`
+(`src/lib/api/client.ts`) wraps a promise and converts a 404 `ApiError` into
+Next's `notFound()`.
+
+One non-obvious Next.js behavior surfaced during live testing: a `notFound()`
+thrown inside `[sessionId]/layout.tsx` is **not** caught by that same
+segment's own `not-found.tsx`, because the layout wraps everything in its
+segment, including that file -- using it would require the layout to render
+around its own replacement. Next.js instead resolves to the nearest
+**ancestor** segment's `not-found.tsx`. Concretely:
+
+- `src/app/sessions/not-found.tsx` (parent segment) renders when the
+  session itself does not exist (the layout's `getSession` 404s).
+- `src/app/sessions/[sessionId]/events/[eventId]/not-found.tsx` renders when
+  a specific detection event ID does not exist within a session that *does*
+  exist (a page-level 404, not wrapped by anything at that path).
+
+This was verified end-to-end against the live backend for both an unknown
+session ID and an unknown event ID within a known session.
+
+### 8.6 Known limitations (tracked as technical debt)
+
+- The detection event detail page fetches the full events list for the
+  session and finds the one matching ID client-side (server-side, at
+  request time), rather than calling a dedicated single-event backend
+  endpoint. Acceptable while per-session event counts are small; would need
+  a `GET /sessions/{id}/detection-events/{event_id}` endpoint if that stops
+  being true.
+- Frontend unit tests cover only the pure `src/lib/format` helpers (11
+  tests). Component and route-level behavior was validated through manual
+  live-backend browser smoke testing, not automated integration/E2E tests --
+  no Playwright/Testing Library suite exists yet for the dashboard.
+- The dashboard has no polling or streaming; health/detections only reflect
+  the most recent completed `AnalysisRun`. A user must click "Run analysis"
+  (or an external caller must invoke the API) to see fresher data.
+
+## 9. Explicit non-goals for now
 
 Do not build these in Phase 0 or the first vertical slice:
 
@@ -702,7 +799,7 @@ Do not build these in Phase 0 or the first vertical slice:
 These may become appropriate later, but each requires a concrete latency,
 volume, compliance, or product requirement.
 
-## 9. Decision summary
+## 10. Decision summary
 
 The minimum viable architecture is a typed Next.js client over a modular
 FastAPI backend using PostgreSQL, with deterministic analysis first and an

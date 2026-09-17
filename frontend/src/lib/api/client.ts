@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+
 /**
  * Base fetch wrapper for all backend calls.
  *
@@ -25,6 +27,27 @@ export class ApiError extends Error {
 /** True when the error represents "the resource does not exist" (404). */
 export function isNotFound(error: unknown): error is ApiError {
   return error instanceof ApiError && error.status === 404;
+}
+
+/**
+ * Awaits `promise`, converting a 404 `ApiError` into Next.js's `notFound()`
+ * flow instead of letting it surface as a generic thrown error.
+ *
+ * Every route segment under `/sessions/[sessionId]` fetches session-scoped
+ * data independently (layout and page render concurrently as separate
+ * Server Components), so each of those fetches -- not just the layout's
+ * -- needs this guard for an unknown session ID to consistently render
+ * the route's `not-found.tsx` rather than Next's generic 404 fallback.
+ */
+export async function orNotFound<T>(promise: Promise<T>): Promise<T> {
+  try {
+    return await promise;
+  } catch (error) {
+    if (isNotFound(error)) {
+      notFound();
+    }
+    throw error;
+  }
 }
 
 interface RequestOptions {
