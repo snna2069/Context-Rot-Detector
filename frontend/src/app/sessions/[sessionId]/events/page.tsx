@@ -1,4 +1,8 @@
-import { listAnalysisRuns, listDetectionEvents } from "@/lib/api/analysis";
+import {
+  detectionEventLimit,
+  getAnalysisStatus,
+  listDetectionEvents,
+} from "@/lib/api/analysis";
 import { orNotFound } from "@/lib/api/client";
 import { AnalysisIntegrityNotice } from "@/components/AnalysisIntegrityNotice";
 import { EmptyState } from "@/components/EmptyState";
@@ -8,16 +12,20 @@ export default async function SessionEventsPage({
   params,
 }: PageProps<"/sessions/[sessionId]">) {
   const { sessionId } = await params;
-  const [events, runs] = await Promise.all([
+  const [events, status] = await Promise.all([
     orNotFound(listDetectionEvents(sessionId)),
-    orNotFound(listAnalysisRuns(sessionId)),
+    orNotFound(getAnalysisStatus(sessionId)),
   ]);
-
-  const latestRun = runs.length > 0 ? runs[0] : null;
 
   return (
     <div className="space-y-6">
-      <AnalysisIntegrityNotice run={latestRun} />
+      <AnalysisIntegrityNotice status={status} />
+      {events.length >= detectionEventLimit ? (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600">
+          Showing the {detectionEventLimit} most recent detection events. Older
+          events for this session are not listed here.
+        </p>
+      ) : null}
       {events.length === 0 ? (
         <EmptyState
           title="No detection events yet"

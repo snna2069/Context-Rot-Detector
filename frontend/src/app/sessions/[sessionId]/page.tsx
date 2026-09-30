@@ -1,5 +1,7 @@
 import { getSessionTimeline } from "@/lib/api/sessions";
+import { getAnalysisStatus } from "@/lib/api/analysis";
 import { orNotFound } from "@/lib/api/client";
+import { AnalysisIntegrityNotice } from "@/components/AnalysisIntegrityNotice";
 import { EmptyState } from "@/components/EmptyState";
 import { formatTimestamp } from "@/lib/format";
 import { CpuIcon, TerminalIcon, UserIcon, WrenchIcon } from "@/components/icons";
@@ -65,7 +67,10 @@ export default async function SessionTimelinePage({
   params,
 }: PageProps<"/sessions/[sessionId]">) {
   const { sessionId } = await params;
-  const timeline = await orNotFound(getSessionTimeline(sessionId));
+  const [timeline, status] = await Promise.all([
+    orNotFound(getSessionTimeline(sessionId)),
+    orNotFound(getAnalysisStatus(sessionId)),
+  ]);
 
   if (timeline.messages.length === 0) {
     return (
@@ -77,7 +82,9 @@ export default async function SessionTimelinePage({
   }
 
   return (
-    <ol className="relative space-y-4 before:absolute before:left-[19px] before:top-2 before:h-[calc(100%-1rem)] before:w-px before:bg-slate-200 sm:before:left-[19px]">
+    <div className="space-y-6">
+      <AnalysisIntegrityNotice status={status} />
+      <ol className="relative space-y-4 before:absolute before:left-[19px] before:top-2 before:h-[calc(100%-1rem)] before:w-px before:bg-slate-200 sm:before:left-[19px]">
       {timeline.messages.map((message) => {
         const Icon = roleIcons[message.role];
         return (
@@ -108,6 +115,7 @@ export default async function SessionTimelinePage({
           </li>
         );
       })}
-    </ol>
+      </ol>
+    </div>
   );
 }

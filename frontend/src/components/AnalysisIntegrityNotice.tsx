@@ -1,58 +1,84 @@
-import type { AnalysisRun } from "@/lib/api/types";
+import type { AnalysisStatus } from "@/lib/api/types";
 import { ExclamationTriangleIcon } from "@/components/icons";
 
 /**
- * Warns that an analysis run did not fully complete.
+ * Warns when stored analysis results should not be read at face value.
  *
- * This exists because "no detections" is ambiguous: it can mean the
- * detectors looked and found nothing, or that they never ran. Without
- * this notice a transient LLM outage would render as a clean, healthy
- * session -- the most dangerous possible failure mode for a monitoring
- * tool. Absence of a signal from a failed detector is not evidence that
- * the condition is absent.
+ * Two distinct cases, both of which otherwise render as a reassuringly
+ * clean dashboard:
+ *
+ * 1. The run did not fully complete (`partial`/`failed`). "No
+ *    detections" then may mean "the detector never ran", not "the
+ *    detector looked and found nothing".
+ * 2. The run is stale -- messages were ingested after it. The stored
+ *    detections and score describe only part of the session and say
+ *    nothing at all about the newer messages.
+ *
+ * For a monitoring tool, silently presenting either as a healthy result
+ * is the most dangerous possible failure mode.
  */
-export function AnalysisIntegrityNotice({ run }: { run: AnalysisRun | null }) {
-  if (run === null) return null;
-  if (run.status !== "partial" && run.status !== "failed") return null;
+export function AnalysisIntegrityNotice({
+  status,
+}: {
+  status: AnalysisStatus | null;
+}) {
+  if (status === null || !status.has_been_analyzed) return null;
 
-  const failed = run.failed_detectors ?? [];
-  const isTotalFailure = run.status === "failed";
+  const run = status.latest_run;
+  const incomplete = run?.status === "partial" || run?.status === "failed";
+  const isTotalFailure = run?.status === "failed";
+
+  if (!incomplete && !status.is_stale) return null;
+
+  const tone = isTotalFailure
+    ? {
+        border: "border-red-300 bg-red-50",
+        head: "text-red-800",
+        body: "text-red-700",
+      }
+    : {
+        border: "border-amber-300 bg-amber-50",
+        head: "text-amber-800",
+        body: "text-amber-700",
+      };
 
   return (
-    <div
-      role="alert"
-      className={`rounded-xl border p-4 ${
-        isTotalFailure
-          ? "border-red-300 bg-red-50"
-          : "border-amber-300 bg-amber-50"
-      }`}
-    >
+    <div role="alert" className={`rounded-xl border p-4 ${tone.border}`}>
       <h2
-        className={`inline-flex items-center gap-2 text-sm font-semibold ${
-          isTotalFailure ? "text-red-800" : "text-amber-800"
-        }`}
+        className={`inline-flex items-center gap-2 text-sm font-semibold ${tone.head}`}
       >
         <ExclamationTriangleIcon className="h-4 w-4" aria-hidden="true" />
         {isTotalFailure
           ? "Analysis failed — these results are not usable"
-          : "Analysis incomplete — results are partial"}
+          : incomplete
+            ? "Analysis incomplete — results are partial"
+            : "Results are out of date"}
       </h2>
-      <p
-        className={`mt-1.5 text-sm ${
-          isTotalFailure ? "text-red-700" : "text-amber-700"
-        }`}
-      >
-        {isTotalFailure
-          ? "No detector completed, so nothing about this session was actually assessed. A missing detection here does not mean the session is healthy."
-          : "Some detectors did not complete, so the dimensions they cover were not assessed. Treat those as unknown, not as clean."}
-      </p>
-      {failed.length > 0 ? (
-        <ul
-          className={`mt-3 space-y-1 text-xs ${
-            isTotalFailure ? "text-red-700" : "text-amber-700"
-          }`}
-        >
-          {failed.map((detector) => (
+
+      {incomplete ? (
+        <p className={`mt-1.5 text-sm ${tone.body}`}>
+          {isTotalFailure
+            ? "No detector completed, so nothing about this session was actually assessed. A missing detection here does not mean the session is healthy."
+            : "Some detectors did not complete, so the dimensions they cover were not assessed. Treat those as unknown, not as clean."}
+        </p>
+      ) : null}
+
+      {status.is_stale ? (
+        <p className={`mt-1.5 text-sm ${tone.body}`}>
+          {status.messages_since_analysis}{" "}
+          {status.messages_since_analysis === 1 ? "message has" : "messages have"}{" "}
+          been ingested since the last analysis run
+          {status.analyzed_through_sequence !== null
+            ? ` (which covered messages up to #${status.analyzed_through_sequence})`
+            : ""}
+          . These results say nothing about those newer messages — run analysis
+          again to include them.
+        </p>
+      ) : null}
+
+      {incomplete && run && run.failed_detectors.length > 0 ? (
+        <ul className={`mt-3 space-y-1 text-xs ${tone.body}`}>
+          {run.failed_detectors.map((detector) => (
             <li key={detector.detector} className="flex gap-2">
               <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-current" />
               <span>
@@ -63,14 +89,9 @@ export function AnalysisIntegrityNotice({ run }: { run: AnalysisRun | null }) {
           ))}
         </ul>
       ) : null}
-      {run.error_message ? (
-        <p
-          className={`mt-3 text-xs ${
-            isTotalFailure ? "text-red-600" : "text-amber-600"
-          }`}
-        >
-          {run.error_message}
-        </p>
+
+      {incomplete && run?.error_message ? (
+        <p className={`mt-3 text-xs ${tone.body}`}>{run.error_message}</p>
       ) : null}
     </div>
   );

@@ -33,13 +33,37 @@ def get_last_sequence_number(db: DBSession, session_id: str) -> int:
     return db.scalar(stmt) or 0
 
 
-def list_by_session(db: DBSession, session_id: str) -> list[Message]:
+def list_by_session(
+    db: DBSession, session_id: str, *, limit: int | None = None, offset: int = 0
+) -> list[Message]:
     stmt = (
         select(Message)
         .where(Message.session_id == session_id)
         .order_by(Message.sequence_number)
     )
+    if offset:
+        stmt = stmt.offset(offset)
+    if limit is not None:
+        stmt = stmt.limit(limit)
     return list(db.scalars(stmt))
+
+
+def count_by_session(db: DBSession, session_id: str) -> int:
+    stmt = select(func.count(Message.id)).where(Message.session_id == session_id)
+    return db.scalar(stmt) or 0
+
+
+def count_after_sequence(db: DBSession, session_id: str, sequence_number: int) -> int:
+    """Messages ingested after a given sequence number.
+
+    Used to decide whether stored analysis results still cover the whole
+    session.
+    """
+    stmt = select(func.count(Message.id)).where(
+        Message.session_id == session_id,
+        Message.sequence_number > sequence_number,
+    )
+    return db.scalar(stmt) or 0
 
 
 def count_by_sessions(db: DBSession, session_ids: list[str]) -> dict[str, int]:

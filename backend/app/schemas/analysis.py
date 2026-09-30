@@ -116,6 +116,24 @@ class AnalysisRunResult(BaseModel):
     health_score: ContextHealthScoreRead | None
 
 
+class AnalysisStatusRead(BaseModel):
+    """Whether stored analysis results still describe the whole session.
+
+    `is_stale` is true when messages were ingested after the most recent
+    analysis run. The stored detections and health score then describe
+    only part of the session, so they must not be read as a verdict on
+    the messages that arrived since.
+    """
+
+    latest_run: AnalysisRunRead | None
+    analyzed_through_sequence: int | None
+    latest_message_sequence: int | None
+    message_count: int
+    messages_since_analysis: int
+    is_stale: bool
+    has_been_analyzed: bool
+
+
 class HealthTrendPointRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

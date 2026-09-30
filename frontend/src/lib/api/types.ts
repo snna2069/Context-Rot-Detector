@@ -172,6 +172,24 @@ export interface AnalysisRunResult {
   health_score: ContextHealthScore | null;
 }
 
+/**
+ * Whether the stored analysis still describes the whole session.
+ *
+ * Analysis runs only when explicitly triggered, so messages ingested
+ * afterwards are not covered by the stored detections or health score.
+ * When `is_stale` is true those results describe only part of the
+ * session and say nothing about the newer messages.
+ */
+export interface AnalysisStatus {
+  latest_run: AnalysisRun | null;
+  analyzed_through_sequence: number | null;
+  latest_message_sequence: number | null;
+  message_count: number;
+  messages_since_analysis: number;
+  is_stale: boolean;
+  has_been_analyzed: boolean;
+}
+
 export interface HealthTrendPoint {
   measured_at: string;
   overall_score: number;

@@ -9,6 +9,8 @@ and persists the resulting signals and health score as
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from sqlalchemy.orm import Session as DBSession
 
 from app.analysis.context import build_session_context
@@ -198,14 +200,76 @@ def _persist_signal(
         )
 
 
-def list_detection_events(db: DBSession, session_id: str) -> list[DetectionEvent]:
+def list_detection_events(
+    db: DBSession, session_id: str, *, limit: int | None = None, offset: int = 0
+) -> list[DetectionEvent]:
     get_session(db, session_id)
-    return analysis_repo.list_detection_events_by_session(db, session_id)
+    return analysis_repo.list_detection_events_by_session(
+        db, session_id, limit=limit, offset=offset
+    )
 
 
-def list_health_scores(db: DBSession, session_id: str) -> list[ContextHealthScore]:
+def list_health_scores(
+    db: DBSession, session_id: str, *, limit: int | None = None, offset: int = 0
+) -> list[ContextHealthScore]:
     get_session(db, session_id)
-    return analysis_repo.list_health_scores_by_session(db, session_id)
+    return analysis_repo.list_health_scores_by_session(
+        db, session_id, limit=limit, offset=offset
+    )
+
+
+@dataclass(frozen=True)
+class AnalysisStatus:
+    """Whether a session's stored analysis still reflects its messages.
+
+    Analysis runs only when explicitly triggered, so messages ingested
+    afterwards are not covered by the stored detections or health score.
+    Without this, the dashboard would keep presenting an old score as if
+    it described the whole session -- a quieter version of the same
+    "stale/absent data looks like good news" problem as a failed run.
+    """
+
+    latest_run: AnalysisRun | None
+    analyzed_through_sequence: int | None
+    latest_message_sequence: int | None
+    message_count: int
+    messages_since_analysis: int
+    is_stale: bool
+    has_been_analyzed: bool
+
+
+def get_analysis_status(db: DBSession, session_id: str) -> AnalysisStatus:
+    get_session(db, session_id)
+    latest_run = analysis_repo.get_latest_run_by_session(db, session_id)
+    latest_message_sequence = messages_repo.get_last_sequence_number(db, session_id)
+    message_count = messages_repo.count_by_session(db, session_id)
+
+    if latest_message_sequence == 0 and message_count == 0:
+        latest_sequence: int | None = None
+    else:
+        latest_sequence = latest_message_sequence
+
+    analyzed_through = latest_run.input_sequence_end if latest_run is not None else None
+
+    if latest_run is None or latest_sequence is None:
+        messages_since = 0
+    elif analyzed_through is None:
+        # The run analyzed an empty session; every message arrived after.
+        messages_since = message_count
+    else:
+        messages_since = messages_repo.count_after_sequence(
+            db, session_id, analyzed_through
+        )
+
+    return AnalysisStatus(
+        latest_run=latest_run,
+        analyzed_through_sequence=analyzed_through,
+        latest_message_sequence=latest_sequence,
+        message_count=message_count,
+        messages_since_analysis=messages_since,
+        is_stale=latest_run is not None and messages_since > 0,
+        has_been_analyzed=latest_run is not None,
+    )
 
 
 def list_analysis_runs(

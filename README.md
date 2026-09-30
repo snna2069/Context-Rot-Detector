@@ -127,8 +127,9 @@ npm run build
 npm test
 ```
 
-`npm test` runs the Vitest suite for the pure formatting/presentation helpers
-in `src/lib/format`.
+`npm test` runs the Vitest suite for the pure formatting/presentation
+helpers in `src/lib/format` and for the API client and response
+validators in `src/lib/api`.
 
 Backend:
 
@@ -139,9 +140,26 @@ Set-Location backend
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-The backend suite covers domain models, migrations, ingestion, every
-deterministic detector, the semantic analysis pipeline (mocked provider,
-no live LLM calls), and health scoring.
+The backend suite covers domain models, ingestion (including
+concurrency-conflict handling), every deterministic detector, the
+semantic analysis pipeline (mocked provider, no live LLM calls), health
+scoring, and analysis-failure handling.
+
+### Migration tests
+
+`tests/test_migrations.py` has two layers. The offline checks (revision
+chain integrity, downgrade coverage, SQL rendering) always run. The
+checks that apply the real migration chain to a real database -- including
+the model/migration drift check -- only run when `TEST_DATABASE_URL`
+points at a disposable PostgreSQL database, and are skipped otherwise:
+
+```powershell
+$env:TEST_DATABASE_URL = "postgresql+psycopg2://postgres:postgres@localhost:5432/context_rot_test"
+.\.venv\Scripts\python.exe -m pytest tests/test_migrations.py
+```
+
+Note that the rest of the suite runs on in-memory SQLite, so
+PostgreSQL-specific behaviour is only exercised by these tests.
 
 There is no CI/CD configured yet -- run these checks locally before
 committing.
