@@ -51,6 +51,7 @@ LOOKBACK_WINDOW = 20
 
 class RepetitionDetector:
     name = "repetition"
+    detection_types = frozenset({DetectionType.REPETITION})
 
     def detect(self, context: SessionContext) -> list[Signal]:
         signals: list[Signal] = []

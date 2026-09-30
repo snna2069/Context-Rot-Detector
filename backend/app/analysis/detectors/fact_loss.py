@@ -72,6 +72,7 @@ STRONG_LINK_BONUS = 0.15
 
 class FactLossDetector:
     name = "fact_loss"
+    detection_types = frozenset({DetectionType.FACT_LOSS})
 
     def detect(self, context: SessionContext) -> list[Signal]:
         signals: list[Signal] = []

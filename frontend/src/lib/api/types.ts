@@ -25,7 +25,12 @@ export type DetectionType =
   | "behavior_shift"
   | "fact_loss";
 
-export type AnalysisRunStatus = "pending" | "running" | "completed" | "failed";
+export type AnalysisRunStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "partial"
+  | "failed";
 
 /**
  * The six evidence-based classifications from the Phase 5 semantic layer
@@ -136,6 +141,12 @@ export interface ContextHealthScore {
   measured_at: string;
 }
 
+/** One detector that did not complete during an analysis run. */
+export interface FailedDetector {
+  detector: string;
+  error: string | null;
+}
+
 export interface AnalysisRun {
   id: string;
   session_id: string;
@@ -144,6 +155,13 @@ export interface AnalysisRun {
   input_sequence_start: number | null;
   input_sequence_end: number | null;
   error_message: string | null;
+  /**
+   * Detectors that raised during the run. When non-empty the run's
+   * signals are incomplete: a dimension with no detections may simply
+   * never have been assessed. Never read an absent signal here as
+   * evidence that the condition is absent.
+   */
+  failed_detectors: FailedDetector[];
   created_at: string;
   completed_at: string | null;
 }

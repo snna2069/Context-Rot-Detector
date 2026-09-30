@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { listDetectionEvents } from "@/lib/api/analysis";
+import { listAnalysisRuns, listDetectionEvents } from "@/lib/api/analysis";
 import { orNotFound } from "@/lib/api/client";
+import { AnalysisIntegrityNotice } from "@/components/AnalysisIntegrityNotice";
 import { EmptyState } from "@/components/EmptyState";
 import { SeverityBadge } from "@/components/SeverityBadge";
 import { NotVerifiedTag } from "@/components/NotVerifiedTag";
@@ -18,7 +19,12 @@ export default async function SessionHallucinationsPage({
   params,
 }: PageProps<"/sessions/[sessionId]">) {
   const { sessionId } = await params;
-  const events = await orNotFound(listDetectionEvents(sessionId));
+  const [events, runs] = await Promise.all([
+    orNotFound(listDetectionEvents(sessionId)),
+    orNotFound(listAnalysisRuns(sessionId)),
+  ]);
+
+  const latestRun = runs.length > 0 ? runs[0] : null;
 
   const claimEvents = events.filter(
     (event) => event.detection_type === "unsupported_claim",
@@ -39,6 +45,7 @@ export default async function SessionHallucinationsPage({
 
   return (
     <div className="space-y-6">
+      <AnalysisIntegrityNotice run={latestRun} />
       <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-none text-amber-500" />
         <div>

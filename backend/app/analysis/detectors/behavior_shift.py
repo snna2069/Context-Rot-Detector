@@ -54,6 +54,7 @@ MAX_CONFIDENCE = 0.75
 
 class BehaviorShiftDetector:
     name = "behavior_shift"
+    detection_types = frozenset({DetectionType.BEHAVIOR_SHIFT})
 
     def detect(self, context: SessionContext) -> list[Signal]:
         assistant_messages = [

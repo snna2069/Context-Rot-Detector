@@ -1,14 +1,28 @@
-from fastapi import FastAPI, Request
+import logging
+
+from fastapi import Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.api import analysis_router, dashboard_router, sessions_router
 from app.config import get_settings
+from app.database import get_db
 from app.errors import ConflictError, NotFoundError
 
 settings = get_settings()
+
+# Configure logging once, at the application entry point. Without this
+# the stdlib root logger drops anything below WARNING, which previously
+# meant detector failures logged by `app.analysis.engine` were invisible.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 # Reject clearly oversized request bodies before they are parsed/validated.
 # This is a transport-level backstop; individual fields also enforce their
@@ -73,9 +87,16 @@ async def conflict_exception_handler(
 
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(
-    _request: Request, _exc: Exception
-) -> JSONResponse:
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # Log with the traceback before returning the opaque 500. Previously
+    # the exception was discarded entirely, so production failures left
+    # no trace anywhere.
+    logger.exception(
+        "Unhandled exception while handling %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
     return JSONResponse(
         status_code=500,
         content={"error": "internal_server_error"},
@@ -88,5 +109,25 @@ app.include_router(dashboard_router)
 
 
 @app.get("/health")
-def health_check() -> dict[str, str]:
-    return {"status": "ok"}
+def health_check(db: Session = Depends(get_db)) -> JSONResponse:
+    """Liveness + database readiness.
+
+    A static "ok" would report healthy during a total database outage,
+    which makes the check useless for deciding whether this instance can
+    actually serve traffic. Takes the database session via the normal
+    `get_db` dependency so it exercises the same connection path as real
+    requests (and so tests can override it).
+    """
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.exception("Health check failed: database unreachable")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unavailable",
+                "database": "unreachable",
+                "detail": type(exc).__name__,
+            },
+        )
+    return JSONResponse(status_code=200, content={"status": "ok", "database": "ok"})

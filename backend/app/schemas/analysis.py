@@ -97,12 +97,19 @@ class AnalysisRunRead(BaseModel):
     input_sequence_start: int | None
     input_sequence_end: int | None
     error_message: str | None
+    failed_detectors: list[dict[str, Any]] = []
     created_at: datetime
     completed_at: datetime | None
 
 
 class AnalysisRunResult(BaseModel):
-    """The full response returned by `POST /sessions/{id}/analyze`."""
+    """The full response returned by `POST /sessions/{id}/analyze`.
+
+    `health_score` is `None` when no health dimension could be assessed
+    (every detector failed). Callers must treat that as "unknown", never
+    as "healthy" -- see `analysis_run.status` and
+    `analysis_run.failed_detectors` for why it is missing.
+    """
 
     analysis_run: AnalysisRunRead
     detection_events: list[DetectionEventRead]

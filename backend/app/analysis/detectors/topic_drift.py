@@ -55,6 +55,7 @@ DRIFT_SIMILARITY_THRESHOLD = 0.12
 
 class TopicDriftDetector:
     name = "topic_drift"
+    detection_types = frozenset({DetectionType.TOPIC_DRIFT})
 
     def detect(self, context: SessionContext) -> list[Signal]:
         messages = context.messages

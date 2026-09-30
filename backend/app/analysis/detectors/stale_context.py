@@ -52,6 +52,7 @@ MAX_CONFIDENCE = 0.7
 
 class StaleContextDetector:
     name = "stale_context"
+    detection_types = frozenset({DetectionType.STALE_CONTEXT})
 
     def detect(self, context: SessionContext) -> list[Signal]:
         assistant_messages = [

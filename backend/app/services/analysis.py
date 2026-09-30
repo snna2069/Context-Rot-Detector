@@ -89,12 +89,38 @@ def run_analysis(
     )
     result = engine.run(context)
 
+    # A detector that raised produced no signals, so its dimensions are
+    # unassessed -- never "clean". Reflect that in the run's status
+    # instead of reporting every run as COMPLETED, which previously made
+    # an LLM outage look like a healthier session.
+    failures = result.failed_outcomes
+    if not failures:
+        status = AnalysisRunStatus.COMPLETED
+        error_message = None
+    elif result.health_score.overall_score is None:
+        status = AnalysisRunStatus.FAILED
+        error_message = (
+            f"All {len(failures)} detector(s) failed; no health dimension "
+            "could be assessed."
+        )
+    else:
+        status = AnalysisRunStatus.PARTIAL
+        error_message = (
+            f"{len(failures)} of {len(result.outcomes)} detector(s) failed; "
+            f"unassessed dimensions: "
+            f"{', '.join(result.health_score.unassessed_dimensions) or 'none'}."
+        )
+
     analysis_run = AnalysisRun(
         session_id=session.id,
         analysis_version=ANALYSIS_VERSION,
-        status=AnalysisRunStatus.COMPLETED,
+        status=status,
         input_sequence_start=messages[0].sequence_number if messages else None,
         input_sequence_end=messages[-1].sequence_number if messages else None,
+        error_message=error_message,
+        failed_detectors=[
+            {"detector": o.detector_name, "error": o.error} for o in failures
+        ],
         completed_at=utc_now(),
     )
     analysis_repo.create_run(db, analysis_run)
@@ -104,25 +130,29 @@ def run_analysis(
     for signal in result.signals:
         _persist_signal(db, session.id, analysis_run.id, signal, messages_by_id)
 
-    analysis_repo.create_health_score(
-        db,
-        ContextHealthScore(
-            session_id=session.id,
-            analysis_run_id=analysis_run.id,
-            overall_score=result.health_score.overall_score,
-            relevance_score=result.health_score.relevance_score,
-            consistency_score=result.health_score.consistency_score,
-            instruction_adherence_score=(
-                result.health_score.instruction_adherence_score
+    # No dimension could be assessed: persisting a health score here
+    # would be fabricating a number, so the run carries its failure
+    # instead and the dashboard shows "not assessed".
+    if result.health_score.overall_score is not None:
+        analysis_repo.create_health_score(
+            db,
+            ContextHealthScore(
+                session_id=session.id,
+                analysis_run_id=analysis_run.id,
+                overall_score=result.health_score.overall_score,
+                relevance_score=result.health_score.relevance_score,
+                consistency_score=result.health_score.consistency_score,
+                instruction_adherence_score=(
+                    result.health_score.instruction_adherence_score
+                ),
+                information_retention_score=(
+                    result.health_score.information_retention_score
+                ),
+                tool_utilization_score=result.health_score.tool_utilization_score,
+                hallucination_risk_score=result.health_score.hallucination_risk_score,
+                measured_at=utc_now(),
             ),
-            information_retention_score=(
-                result.health_score.information_retention_score
-            ),
-            tool_utilization_score=result.health_score.tool_utilization_score,
-            hallucination_risk_score=result.health_score.hallucination_risk_score,
-            measured_at=utc_now(),
-        ),
-    )
+        )
 
     db.commit()
     run = analysis_repo.get_run_by_id(db, analysis_run.id)
@@ -176,6 +206,18 @@ def list_detection_events(db: DBSession, session_id: str) -> list[DetectionEvent
 def list_health_scores(db: DBSession, session_id: str) -> list[ContextHealthScore]:
     get_session(db, session_id)
     return analysis_repo.list_health_scores_by_session(db, session_id)
+
+
+def list_analysis_runs(
+    db: DBSession, session_id: str, *, limit: int = 50
+) -> list[AnalysisRun]:
+    """Recent analysis runs, newest first.
+
+    Lets a caller see whether the most recent run actually completed, so
+    an incomplete run is never mistaken for a clean result.
+    """
+    get_session(db, session_id)
+    return analysis_repo.list_runs_by_session(db, session_id, limit=limit)
 
 
 def get_health_trend(db: DBSession, session_id: str) -> HealthTrendResult:

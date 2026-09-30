@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session as DBSession
 
 from app.database import get_db
@@ -42,6 +42,23 @@ def list_detection_events(
 ) -> list[DetectionEventRead]:
     events = analysis_service.list_detection_events(db, session_id)
     return [DetectionEventRead.from_orm_event(event) for event in events]
+
+
+@router.get("/{session_id}/analysis-runs", response_model=list[AnalysisRunRead])
+def list_analysis_runs(
+    session_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: DBSession = Depends(get_db),
+) -> list[AnalysisRunRead]:
+    """Recent analysis runs, newest first.
+
+    Exposes `status`, `error_message`, and `failed_detectors` so a client
+    can tell whether the stored detections/health score came from a run
+    where every detector actually completed. A `partial` or `failed` run
+    means absent signals are unknown, not absent.
+    """
+    runs = analysis_service.list_analysis_runs(db, session_id, limit=limit)
+    return [AnalysisRunRead.model_validate(run) for run in runs]
 
 
 @router.get("/{session_id}/health-scores", response_model=list[ContextHealthScoreRead])

@@ -7,6 +7,13 @@ hallucination risk. Every detection carries a confidence score, supporting
 evidence, and an explanation -- the system never reports a suspicious signal
 as an unqualified fact.
 
+Equally, it never reports an *unmeasured* signal as a clean one. If a
+detector fails (for example a semantic detector whose LLM call times out),
+the analysis run is recorded as `partial` or `failed`, the health
+dimensions that detector covered are reported as "not assessed" rather
+than scored, and the dashboard says so. An absent detection from a failed
+detector is not evidence that the condition is absent.
+
 Phases 0-7 are implemented and validated:
 
 - **Ingestion** -- provider-agnostic APIs for creating sessions and recording

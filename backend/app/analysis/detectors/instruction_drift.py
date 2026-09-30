@@ -69,6 +69,7 @@ DIRECTIVE_ROLES = {MessageRole.SYSTEM, MessageRole.DEVELOPER, MessageRole.USER}
 
 class InstructionDriftDetector:
     name = "instruction_drift"
+    detection_types = frozenset({DetectionType.INSTRUCTION_DRIFT})
 
     def detect(self, context: SessionContext) -> list[Signal]:
         signals: list[Signal] = []

@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api/client";
 import type {
+  AnalysisRun,
   AnalysisRunResult,
   ContextHealthScore,
   DetectionEvent,
@@ -14,6 +15,12 @@ export function listHealthScores(
   sessionId: string,
 ): Promise<ContextHealthScore[]> {
   return apiFetch<ContextHealthScore[]>(`/sessions/${sessionId}/health-scores`);
+}
+
+/** Recent analysis runs, newest first. Used to tell whether the stored
+ * results came from a run where every detector actually completed. */
+export function listAnalysisRuns(sessionId: string): Promise<AnalysisRun[]> {
+  return apiFetch<AnalysisRun[]>(`/sessions/${sessionId}/analysis-runs`);
 }
 
 export function getHealthTrend(sessionId: string): Promise<HealthTrend> {

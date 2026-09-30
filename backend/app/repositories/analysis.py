@@ -60,6 +60,23 @@ def get_run_by_id(db: DBSession, analysis_run_id: str) -> AnalysisRun | None:
     return db.scalar(stmt)
 
 
+def list_runs_by_session(
+    db: DBSession, session_id: str, *, limit: int = 50
+) -> list[AnalysisRun]:
+    """Most recent analysis runs for a session, newest first.
+
+    Exposing run status/failures is what lets a reader tell a genuinely
+    clean session from one whose detectors did not all complete.
+    """
+    stmt = (
+        select(AnalysisRun)
+        .where(AnalysisRun.session_id == session_id)
+        .order_by(AnalysisRun.created_at.desc())
+        .limit(limit)
+    )
+    return list(db.scalars(stmt))
+
+
 def list_detection_events_by_session(
     db: DBSession, session_id: str
 ) -> list[DetectionEvent]:

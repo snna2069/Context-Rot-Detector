@@ -65,6 +65,7 @@ MAX_CONFIDENCE = 0.85
 
 class ContradictionDetector:
     name = "contradiction"
+    detection_types = frozenset({DetectionType.CONTRADICTION})
 
     def detect(self, context: SessionContext) -> list[Signal]:
         signals: list[Signal] = []
