@@ -7,6 +7,13 @@ hallucination risk. Every detection carries a confidence score, supporting
 evidence, and an explanation -- the system never reports a suspicious signal
 as an unqualified fact.
 
+Equally, it never reports an *unmeasured* signal as a clean one. If a
+detector fails (for example a semantic detector whose LLM call times out),
+the analysis run is recorded as `partial` or `failed`, the health
+dimensions that detector covered are reported as "not assessed" rather
+than scored, and the dashboard says so. An absent detection from a failed
+detector is not evidence that the condition is absent.
+
 Phases 0-7 are implemented and validated:
 
 - **Ingestion** -- provider-agnostic APIs for creating sessions and recording
@@ -120,8 +127,9 @@ npm run build
 npm test
 ```
 
-`npm test` runs the Vitest suite for the pure formatting/presentation helpers
-in `src/lib/format`.
+`npm test` runs the Vitest suite for the pure formatting/presentation
+helpers in `src/lib/format` and for the API client and response
+validators in `src/lib/api`.
 
 Backend:
 
@@ -132,9 +140,58 @@ Set-Location backend
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-The backend suite covers domain models, migrations, ingestion, every
-deterministic detector, the semantic analysis pipeline (mocked provider,
-no live LLM calls), and health scoring.
+The backend suite covers domain models, ingestion (including
+concurrency-conflict handling), every deterministic detector, the
+semantic analysis pipeline (mocked provider, no live LLM calls), health
+scoring, and analysis-failure handling.
+
+### Running the tests against PostgreSQL
+
+By default the suite runs on in-memory SQLite with the schema built by
+`Base.metadata.create_all()`, so it needs no database and never executes
+a migration. Set `TEST_DATABASE_URL` to run the **same** suite against a
+real PostgreSQL database whose schema is built by applying the Alembic
+migrations, which additionally enables the migration tests (including the
+model/migration drift check):
+
+```powershell
+docker run -d --name crd-test-pg `
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres `
+  -e POSTGRES_DB=context_rot_test -p 55432:5432 postgres:16-alpine
+
+$env:TEST_DATABASE_URL = "postgresql+psycopg2://postgres:postgres@localhost:55432/context_rot_test"
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Tear the container down with `docker rm -f crd-test-pg`. Anything not
+covered by a PostgreSQL run -- JSON column behaviour, constraint
+enforcement, transactional DDL -- is only exercised in this mode, so run
+it before changing models or migrations.
+
+### Detection-quality evaluation
+
+The test suite answers "does the code behave as written?". A separate
+harness answers "do the detectors actually identify context rot, and is
+their confidence meaningful?":
+
+```powershell
+Set-Location backend
+.\.venv\Scripts\python.exe -m evaluation          # human-readable report
+.\.venv\Scripts\python.exe -m evaluation --json   # machine-readable
+```
+
+It runs the deterministic detectors over a labeled corpus of agent
+sessions in `backend/evaluation/corpus/` and reports per-detector
+precision, recall, false-positive rate and a confidence-calibration
+curve. No LLM is called, so a run is free, offline and reproducible.
+
+The corpus is small, author-written and single-labeled, so the numbers
+are a **regression baseline, not a measure of real-world accuracy**. The
+measured baseline is recorded in `backend/evaluation/baseline.json`, and
+`tests/test_evaluation_harness.py` fails if quality drops below it. Read
+`backend/evaluation/corpus/README.md` before adding scenarios -- labels
+must come from the scenario's intent, never from what the detectors
+happen to output.
 
 There is no CI/CD configured yet -- run these checks locally before
 committing.

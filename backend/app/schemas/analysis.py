@@ -97,16 +97,41 @@ class AnalysisRunRead(BaseModel):
     input_sequence_start: int | None
     input_sequence_end: int | None
     error_message: str | None
+    failed_detectors: list[dict[str, Any]] = []
     created_at: datetime
     completed_at: datetime | None
 
 
 class AnalysisRunResult(BaseModel):
-    """The full response returned by `POST /sessions/{id}/analyze`."""
+    """The full response returned by `POST /sessions/{id}/analyze`.
+
+    `health_score` is `None` when no health dimension could be assessed
+    (every detector failed). Callers must treat that as "unknown", never
+    as "healthy" -- see `analysis_run.status` and
+    `analysis_run.failed_detectors` for why it is missing.
+    """
 
     analysis_run: AnalysisRunRead
     detection_events: list[DetectionEventRead]
     health_score: ContextHealthScoreRead | None
+
+
+class AnalysisStatusRead(BaseModel):
+    """Whether stored analysis results still describe the whole session.
+
+    `is_stale` is true when messages were ingested after the most recent
+    analysis run. The stored detections and health score then describe
+    only part of the session, so they must not be read as a verdict on
+    the messages that arrived since.
+    """
+
+    latest_run: AnalysisRunRead | None
+    analyzed_through_sequence: int | None
+    latest_message_sequence: int | None
+    message_count: int
+    messages_since_analysis: int
+    is_stale: bool
+    has_been_analyzed: bool
 
 
 class HealthTrendPointRead(BaseModel):

@@ -67,6 +67,7 @@ STRONG_OVERLAP_BONUS = 0.2
 
 class OmissionDetector:
     name = "omission"
+    detection_types = frozenset({DetectionType.OMISSION})
 
     def detect(self, context: SessionContext) -> list[Signal]:
         signals: list[Signal] = []

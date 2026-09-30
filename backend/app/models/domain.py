@@ -79,6 +79,7 @@ class AnalysisRunStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
+    PARTIAL = "partial"
     FAILED = "failed"
 
 
@@ -343,6 +344,11 @@ class AnalysisRun(Base):
     input_sequence_start: Mapped[int | None] = mapped_column(Integer)
     input_sequence_end: Mapped[int | None] = mapped_column(Integer)
     error_message: Mapped[str | None] = mapped_column(Text)
+    # Names of detectors that raised during this run, with the reason.
+    # A non-empty value means the run's signals -- and therefore its
+    # health score -- are incomplete: absence of a signal from a failed
+    # detector is NOT evidence that the condition is absent.
+    failed_detectors: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

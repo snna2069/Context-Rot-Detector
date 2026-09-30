@@ -1,0 +1,57 @@
+id: benign-legitimately-long-answer
+title: User asks for detail and the agent gives a long reply
+category: benign_variation
+description: >
+  A session of short exchanges ends with the user explicitly asking for a
+  thorough write-up, and the assistant producing a much longer message
+  than any before it.
+notes: >
+  A sudden jump in response length is exactly what a length-based
+  behaviour-shift heuristic looks for, but here it was requested. Length
+  change on its own is not degradation - which is why the health model
+  treats behaviour shift as informational only.
+expected_detections: []
+messages:
+  - role: user
+    content: Is the cache warm after a restart?
+  - role: assistant
+    content: No, it starts empty after a restart.
+  - role: user
+    content: How long does it take to warm up?
+  - role: assistant
+    content: Usually a few minutes under normal traffic.
+  - role: user
+    content: Does that cause errors?
+  - role: assistant
+    content: Not errors, just slower responses while it fills.
+  - role: user
+    content: Can we pre-warm it?
+  - role: assistant
+    content: Yes, with a startup job that fetches the hottest keys.
+  - role: user
+    content: Is that complicated?
+  - role: assistant
+    content: Not especially, it is a small script.
+  - role: user
+    content: Would it help during a failover?
+  - role: assistant
+    content: Yes, quite a lot.
+  - role: user
+    content: Please write a thorough explanation of the whole cache warming strategy that I can paste into our design document, covering the startup job, the key selection, the failover behaviour and the operational risks.
+  - role: assistant
+    content: >
+      Here is a full write-up you can paste into the design document. The cache
+      begins empty after any restart, which means the first requests after a
+      deployment or a failover fall through to the primary datastore. Under
+      normal traffic the cache fills within a few minutes, and during that
+      window latency is elevated but correctness is unaffected. To shorten the
+      window we add a startup job that pre-populates the cache before the
+      instance begins serving traffic. Key selection matters more than raw
+      volume - loading the few thousand hottest keys captures most of the
+      benefit, and the hot set can be derived from the previous day's access
+      log rather than computed live. During a failover the same job runs on the
+      promoted instance, so the replacement does not start cold at exactly the
+      moment load is highest. The main operational risks are the job delaying
+      startup if it is allowed to block readiness, and the hot-key list going
+      stale if the log export breaks silently. Both are mitigated by bounding
+      the job with a timeout and alerting on the age of the exported list.

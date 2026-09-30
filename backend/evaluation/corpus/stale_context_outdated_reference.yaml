@@ -1,0 +1,55 @@
+id: stale-context-outdated-reference
+title: Agent keeps reasoning from a superseded tool result
+category: tool_usage
+description: >
+  A deployment status is fetched early in the session. Much later, after
+  the user mentions a new deployment has happened, the assistant is still
+  answering from the original stale result.
+notes: >
+  Distinct from contradiction - the agent is consistent, just anchored to
+  information that is no longer current.
+expected_detections:
+  - stale_context
+tolerated_detections:
+  - tool_result_misuse
+  - contradiction
+messages:
+  - role: user
+    content: What version is deployed to production?
+  - role: assistant
+    content: Checking the deployment status now.
+    tool_calls:
+      - tool_name: get_deployment
+        arguments:
+          environment: production
+        result:
+          output:
+            version: 2.4.1
+            deployed_at: "2026-01-01T09:00:00Z"
+          is_error: false
+  - role: assistant
+    content: The deployed version is 2.4.1 in production, released earlier this morning.
+  - role: user
+    content: Does that include the rate limiting fix?
+  - role: assistant
+    content: The deployed version is 2.4.1, and the rate limiting fix landed in 2.4.0, so yes it is included.
+  - role: user
+    content: What about the new audit log format?
+  - role: assistant
+    content: The deployed version is 2.4.1, and the audit log change is scheduled for 2.5.0, so it is not in production yet.
+  - role: user
+    content: We shipped 2.6.0 about an hour ago, by the way.
+  - role: assistant
+    content: Understood.
+  - role: user
+    content: So does production have the audit log format now?
+  - role: assistant
+    content: The deployed version is 2.4.1, so the audit log format change is not present. You would need to wait for the 2.5.0 release to pick it up.
+  - role: user
+    content: And the new export endpoint?
+  - role: assistant
+    content: The deployed version is 2.4.1, which predates the export endpoint, so that is not available either.
+  - role: user
+    content: Are you certain about the version?
+  - role: assistant
+    content: The deployed version is 2.4.1 according to the deployment status I retrieved for production.

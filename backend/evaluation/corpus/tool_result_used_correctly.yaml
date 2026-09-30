@@ -1,0 +1,31 @@
+id: tool-result-used-correctly
+title: Agent calls a tool and uses the result faithfully
+category: tool_usage
+description: >
+  The assistant looks up the build status and reports exactly what the
+  tool returned, including the failing stage and test count.
+notes: >
+  The control case for tool-result neglect. Nothing should fire.
+expected_detections: []
+messages:
+  - role: user
+    content: Did the nightly build pass?
+  - role: assistant
+    content: Let me check the build status for you.
+    tool_calls:
+      - tool_name: get_build_status
+        arguments:
+          pipeline: nightly
+        result:
+          output:
+            status: failed
+            failed_stage: integration-tests
+            failing_tests: 14
+            commit: a1b2c3d
+          is_error: false
+  - role: assistant
+    content: The nightly build failed. The status came back as failed at the integration-tests stage, with 14 failing tests on commit a1b2c3d.
+  - role: user
+    content: Which tests are failing?
+  - role: assistant
+    content: The status payload gives the count of 14 failing tests at the integration-tests stage but not the individual names. I can fetch the detailed test report next if that would help.

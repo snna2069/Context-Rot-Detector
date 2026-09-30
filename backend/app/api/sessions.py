@@ -48,9 +48,12 @@ def add_message(
 
 @router.get("/{session_id}/messages", response_model=list[MessageRead])
 def list_messages(
-    session_id: str, db: DBSession = Depends(get_db)
+    session_id: str,
+    limit: int = Query(default=500, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: DBSession = Depends(get_db),
 ) -> list[MessageRead]:
-    messages = ingestion.list_messages(db, session_id)
+    messages = ingestion.list_messages(db, session_id, limit=limit, offset=offset)
     return [MessageRead.model_validate(message) for message in messages]
 
 
@@ -86,9 +89,14 @@ def add_tool_result(
 
 @router.get("/{session_id}/timeline", response_model=SessionTimelineResponse)
 def get_timeline(
-    session_id: str, db: DBSession = Depends(get_db)
+    session_id: str,
+    limit: int = Query(default=500, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: DBSession = Depends(get_db),
 ) -> SessionTimelineResponse:
-    session, messages = ingestion.get_timeline(db, session_id)
+    session, messages = ingestion.get_timeline(
+        db, session_id, limit=limit, offset=offset
+    )
     return SessionTimelineResponse(
         session=AgentSessionRead.model_validate(session),
         messages=messages,

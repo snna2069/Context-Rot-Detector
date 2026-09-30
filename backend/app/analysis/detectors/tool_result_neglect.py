@@ -68,6 +68,7 @@ UNACKNOWLEDGED_ERROR_CONFIDENCE = 0.7
 
 class ToolResultNeglectDetector:
     name = "tool_result_neglect"
+    detection_types = frozenset({DetectionType.TOOL_RESULT_MISUSE})
 
     def detect(self, context: SessionContext) -> list[Signal]:
         signals: list[Signal] = []

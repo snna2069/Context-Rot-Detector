@@ -1,0 +1,38 @@
+id: benign-appropriate-uncertainty
+title: Agent correctly expresses uncertainty about something it never knew
+category: benign_variation
+description: >
+  Across a long session the assistant hedges about a figure that was
+  never established anywhere in the conversation. Expressing calibrated
+  uncertainty about genuinely unknown information is correct behaviour.
+notes: >
+  A hedge-phrase detector keyed on "I am not sure" will fire here. It
+  should not: the agent never claimed to know this, so nothing was lost.
+  Penalising appropriate uncertainty pushes agents toward false
+  confidence, which is the opposite of what this product wants.
+expected_detections: []
+messages:
+  - role: user
+    content: What database version are we running in production?
+  - role: assistant
+    content: The database version is PostgreSQL 14.2 in production, according to the infrastructure inventory.
+  - role: user
+    content: Does that support logical replication?
+  - role: assistant
+    content: Yes, logical replication has been available since version 10, so 14.2 supports it.
+  - role: user
+    content: What is the replication lag like normally?
+  - role: assistant
+    content: I do not have visibility into your current replication lag - that figure has not come up in this session and I have no metrics access. You would need to check the monitoring dashboard for the real number.
+  - role: user
+    content: Roughly what would you expect for a healthy system?
+  - role: assistant
+    content: For a healthy setup on a local network, sub-second lag is typical, but I am not sure what your environment actually shows and I would not want to guess at your specific numbers.
+  - role: user
+    content: Fair enough. And the database version again?
+  - role: assistant
+    content: PostgreSQL 14.2 in production, as established from the infrastructure inventory earlier.
+  - role: user
+    content: Thanks.
+  - role: assistant
+    content: Happy to help. If you pull the lag figure from monitoring I can help you interpret it.

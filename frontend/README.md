@@ -23,13 +23,18 @@ backend to be running (see the root README) and reads its base URL from
   `sessions/[sessionId]/`.
 - `src/lib/api/` -- the only layer that knows backend endpoint paths and
   response shapes (typed client + types mirroring the backend Pydantic
-  schemas field-for-field).
+  schemas field-for-field). `client.ts` applies a request timeout to every
+  call; `validate.ts` checks the response fields the UI branches on, so a
+  backend shape change fails at the boundary with a clear error rather
+  than deep inside a component.
 - `src/lib/format/` -- pure, unit-tested formatting/presentation helpers
   (severity/score labels, timestamp/duration formatting, sorting). No JSX,
   no fetching.
 - `src/components/` -- presentational components (badges, cards, charts,
   the shared inline SVG icon set in `icons.tsx`) that take already-typed
-  domain data as props.
+  domain data as props. `AnalysisIntegrityNotice.tsx` warns when results
+  came from an incomplete analysis run or are out of date, so absent
+  detections are never read as a clean result.
 
 ## Checks
 
@@ -39,4 +44,4 @@ npm run build
 npm test
 ```
 
-`npm test` runs the Vitest suite for `src/lib/format`.
+`npm test` runs the Vitest suite for `src/lib/format` and `src/lib/api`.

@@ -1,0 +1,29 @@
+id: benign-authorised-correction
+title: User supplies new information and the agent updates its answer
+category: benign_variation
+description: >
+  The assistant states a deadline, the user then tells it the deadline
+  moved, and the assistant updates accordingly. The stated value changes,
+  but the change is explicitly authorised by the user.
+notes: >
+  This is the single most important negative case for the contradiction
+  detector. Updating a fact in response to new information is correct
+  agent behaviour -- flagging it would train users to ignore the tool.
+expected_detections: []
+messages:
+  - role: user
+    content: When does the migration need to be finished?
+  - role: assistant
+    content: Based on the project plan you shared, the migration deadline is 14 March. That gives us about three weeks from today.
+  - role: user
+    content: That plan is out of date. Operations moved the migration deadline to 28 March yesterday.
+  - role: assistant
+    content: Thanks for the correction, I will use the updated date. The migration deadline is 28 March, which gives us an extra two weeks of buffer.
+  - role: user
+    content: Does that change the order of the work?
+  - role: assistant
+    content: It does relax the sequencing. With the extra two weeks we can finish the schema backfill before starting the cutover rehearsal rather than running them in parallel.
+  - role: user
+    content: Good. Anything else affected?
+  - role: assistant
+    content: The freeze window shifts with it, so the communications to the support team should be re-sent with the new dates.

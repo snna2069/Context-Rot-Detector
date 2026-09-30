@@ -28,6 +28,19 @@ Design notes
   sub-scores below; they are surfaced as detection events but do not by
   themselves reduce the health score, per the instruction to never treat
   length/growth alone as rot.
+- `TOPIC_DRIFT` is informational for the same reason, on measured
+  evidence. Evaluated against the labeled corpus (see `evaluation/`), its
+  lexical vocabulary-overlap measure does not separate genuine drift from
+  normal conversational progression: the overlap ratios for sessions
+  where the agent truly lost the thread (0.085, 0.132) sit inside the
+  range produced by healthy sessions (0.067-0.296). It reached 12.5%
+  precision with a 37% false-positive rate, firing on 7 of 8 sessions
+  that had no degradation at all. No threshold separates the two
+  distributions, so the fix is not a tuning change: distinguishing a
+  deliberate topic change from lost context needs semantic similarity,
+  not word overlap. Until it can be shown to discriminate, the signal is
+  still surfaced for human review but must not silently push down a
+  health score that users are asked to trust.
 - Six dimensions are tracked (rather than one flat number) so a
   degrading score is explainable: which specific detector families are
   driving it. `REPETITION` is folded into `relevance` (repeated content
@@ -59,12 +72,12 @@ if TYPE_CHECKING:
     from app.config import Settings
 
 # Detection types that reduce each sub-score. A signal of a type not
-# listed here (currently only CONTEXT_GROWTH and BEHAVIOR_SHIFT) is
+# listed here (CONTEXT_GROWTH, BEHAVIOR_SHIFT and TOPIC_DRIFT) is
 # informational and never penalizes any sub-score.
 _CONSISTENCY_TYPES = {DetectionType.CONTRADICTION}
 _INSTRUCTION_ADHERENCE_TYPES = {DetectionType.INSTRUCTION_DRIFT}
 _INFORMATION_RETENTION_TYPES = {DetectionType.FACT_LOSS, DetectionType.OMISSION}
-_RELEVANCE_TYPES = {DetectionType.TOPIC_DRIFT, DetectionType.REPETITION}
+_RELEVANCE_TYPES = {DetectionType.REPETITION}
 _TOOL_UTILIZATION_TYPES = {DetectionType.TOOL_RESULT_MISUSE}
 _HALLUCINATION_RISK_TYPES = {DetectionType.UNSUPPORTED_CLAIM}
 
@@ -138,13 +151,24 @@ DEFAULT_WEIGHTS = HealthScoreWeights()
 
 @dataclass(frozen=True)
 class HealthScoreResult:
-    overall_score: float
-    relevance_score: float
-    consistency_score: float
-    instruction_adherence_score: float
-    information_retention_score: float
-    tool_utilization_score: float
-    hallucination_risk_score: float
+    """Per-dimension and overall health.
+
+    A dimension is `None` when it could not be assessed this run (every
+    detector covering it failed). `None` is deliberately NOT the same as
+    `1.0`: a dimension nobody managed to evaluate must never be rendered
+    as a clean one. `overall_score` is likewise `None` when no dimension
+    at all could be assessed, in which case the caller should record the
+    run as failed and persist no health score rather than inventing one.
+    """
+
+    overall_score: float | None
+    relevance_score: float | None
+    consistency_score: float | None
+    instruction_adherence_score: float | None
+    information_retention_score: float | None
+    tool_utilization_score: float | None
+    hallucination_risk_score: float | None
+    unassessed_dimensions: tuple[str, ...] = ()
 
 
 def _penalty_for(signal: Signal, penalty_per_signal: float) -> float:
@@ -158,8 +182,27 @@ def _penalty_for(signal: Signal, penalty_per_signal: float) -> float:
 
 
 def _score_for(
-    signals: list[Signal], types: set[DetectionType], penalty_per_signal: float
-) -> float:
+    signals: list[Signal],
+    types: set[DetectionType],
+    penalty_per_signal: float,
+    assessed_types: frozenset[DetectionType] | None,
+) -> float | None:
+    """Score one dimension, or `None` if it could not be assessed.
+
+    A dimension is only scored when at least one detector that actually
+    completed this run covers one of its detection types. That handles
+    both ways a dimension can go unmeasured: a detector that raised (e.g.
+    an LLM timeout), and a dimension no registered detector covers at
+    all. Either way the honest answer is "not assessed", never 1.0 --
+    reporting an unmeasured dimension as perfect is what made a failed
+    analysis look like a healthy session.
+
+    `assessed_types=None` means "coverage unknown, assume assessed",
+    which preserves the behaviour of callers that score a plain list of
+    signals without running the engine.
+    """
+    if assessed_types is not None and not (types & assessed_types):
+        return None
     relevant = [s for s in signals if s.detection_type in types]
     if not relevant:
         return 1.0
@@ -168,22 +211,30 @@ def _score_for(
 
 
 def compute_health_score(
-    signals: list[Signal], weights: HealthScoreWeights | None = None
+    signals: list[Signal],
+    weights: HealthScoreWeights | None = None,
+    assessed_types: frozenset[DetectionType] | None = None,
 ) -> HealthScoreResult:
     weights = weights or DEFAULT_WEIGHTS
     penalty_per_signal = weights.penalty_per_signal
 
-    consistency = _score_for(signals, _CONSISTENCY_TYPES, penalty_per_signal)
+    consistency = _score_for(
+        signals, _CONSISTENCY_TYPES, penalty_per_signal, assessed_types
+    )
     instruction_adherence = _score_for(
-        signals, _INSTRUCTION_ADHERENCE_TYPES, penalty_per_signal
+        signals, _INSTRUCTION_ADHERENCE_TYPES, penalty_per_signal, assessed_types
     )
     information_retention = _score_for(
-        signals, _INFORMATION_RETENTION_TYPES, penalty_per_signal
+        signals, _INFORMATION_RETENTION_TYPES, penalty_per_signal, assessed_types
     )
-    relevance = _score_for(signals, _RELEVANCE_TYPES, penalty_per_signal)
-    tool_utilization = _score_for(signals, _TOOL_UTILIZATION_TYPES, penalty_per_signal)
+    relevance = _score_for(
+        signals, _RELEVANCE_TYPES, penalty_per_signal, assessed_types
+    )
+    tool_utilization = _score_for(
+        signals, _TOOL_UTILIZATION_TYPES, penalty_per_signal, assessed_types
+    )
     hallucination_risk = _score_for(
-        signals, _HALLUCINATION_RISK_TYPES, penalty_per_signal
+        signals, _HALLUCINATION_RISK_TYPES, penalty_per_signal, assessed_types
     )
 
     dimension_scores = {
@@ -194,17 +245,30 @@ def compute_health_score(
         "tool_utilization": tool_utilization,
         "hallucination_risk": hallucination_risk,
     }
-    total_weight = sum(
-        weights.dimension_weights.get(name, 0.0) for name in dimension_scores
+    unassessed_dimensions = tuple(
+        name for name, score in dimension_scores.items() if score is None
     )
-    if total_weight <= 0:
-        overall = round(sum(dimension_scores.values()) / len(dimension_scores), 3)
+    # Only dimensions that were actually assessed contribute to the
+    # overall score. An unassessed dimension is excluded entirely rather
+    # than being substituted with 1.0, which would silently inflate the
+    # overall number exactly when the analysis was least complete.
+    assessed = {
+        name: score for name, score in dimension_scores.items() if score is not None
+    }
+    if not assessed:
+        overall = None
     else:
-        weighted_sum = sum(
-            score * weights.dimension_weights.get(name, 0.0)
-            for name, score in dimension_scores.items()
+        total_weight = sum(
+            weights.dimension_weights.get(name, 0.0) for name in assessed
         )
-        overall = round(weighted_sum / total_weight, 3)
+        if total_weight <= 0:
+            overall = round(sum(assessed.values()) / len(assessed), 3)
+        else:
+            weighted_sum = sum(
+                score * weights.dimension_weights.get(name, 0.0)
+                for name, score in assessed.items()
+            )
+            overall = round(weighted_sum / total_weight, 3)
 
     return HealthScoreResult(
         overall_score=overall,
@@ -214,4 +278,5 @@ def compute_health_score(
         information_retention_score=information_retention,
         tool_utilization_score=tool_utilization,
         hallucination_risk_score=hallucination_risk,
+        unassessed_dimensions=unassessed_dimensions,
     )

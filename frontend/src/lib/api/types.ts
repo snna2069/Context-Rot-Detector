@@ -25,7 +25,12 @@ export type DetectionType =
   | "behavior_shift"
   | "fact_loss";
 
-export type AnalysisRunStatus = "pending" | "running" | "completed" | "failed";
+export type AnalysisRunStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "partial"
+  | "failed";
 
 /**
  * The six evidence-based classifications from the Phase 5 semantic layer
@@ -136,6 +141,12 @@ export interface ContextHealthScore {
   measured_at: string;
 }
 
+/** One detector that did not complete during an analysis run. */
+export interface FailedDetector {
+  detector: string;
+  error: string | null;
+}
+
 export interface AnalysisRun {
   id: string;
   session_id: string;
@@ -144,6 +155,13 @@ export interface AnalysisRun {
   input_sequence_start: number | null;
   input_sequence_end: number | null;
   error_message: string | null;
+  /**
+   * Detectors that raised during the run. When non-empty the run's
+   * signals are incomplete: a dimension with no detections may simply
+   * never have been assessed. Never read an absent signal here as
+   * evidence that the condition is absent.
+   */
+  failed_detectors: FailedDetector[];
   created_at: string;
   completed_at: string | null;
 }
@@ -152,6 +170,24 @@ export interface AnalysisRunResult {
   analysis_run: AnalysisRun;
   detection_events: DetectionEvent[];
   health_score: ContextHealthScore | null;
+}
+
+/**
+ * Whether the stored analysis still describes the whole session.
+ *
+ * Analysis runs only when explicitly triggered, so messages ingested
+ * afterwards are not covered by the stored detections or health score.
+ * When `is_stale` is true those results describe only part of the
+ * session and say nothing about the newer messages.
+ */
+export interface AnalysisStatus {
+  latest_run: AnalysisRun | null;
+  analyzed_through_sequence: number | null;
+  latest_message_sequence: number | null;
+  message_count: number;
+  messages_since_analysis: number;
+  is_stale: boolean;
+  has_been_analyzed: boolean;
 }
 
 export interface HealthTrendPoint {

@@ -1,0 +1,15 @@
+id: sparse-single-exchange
+title: One question and one answer
+category: sparse_context
+description: >
+  A complete but minimal session. There is no history against which any
+  degradation could be measured.
+notes: >
+  Degradation is a property of a session over time. A two-message session
+  cannot exhibit it, so anything raised here is a false positive.
+expected_detections: []
+messages:
+  - role: user
+    content: What is the default port for PostgreSQL?
+  - role: assistant
+    content: The default port for PostgreSQL is 5432. You can change it with the port setting in postgresql.conf if you need to run more than one instance on the same host.

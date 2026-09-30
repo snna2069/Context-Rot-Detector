@@ -60,8 +60,36 @@ def get_run_by_id(db: DBSession, analysis_run_id: str) -> AnalysisRun | None:
     return db.scalar(stmt)
 
 
+def list_runs_by_session(
+    db: DBSession, session_id: str, *, limit: int = 50
+) -> list[AnalysisRun]:
+    """Most recent analysis runs for a session, newest first.
+
+    Exposing run status/failures is what lets a reader tell a genuinely
+    clean session from one whose detectors did not all complete.
+    """
+    stmt = (
+        select(AnalysisRun)
+        .where(AnalysisRun.session_id == session_id)
+        .order_by(AnalysisRun.created_at.desc())
+        .limit(limit)
+    )
+    return list(db.scalars(stmt))
+
+
+def get_latest_run_by_session(db: DBSession, session_id: str) -> AnalysisRun | None:
+    """The most recent run, used to judge whether results are stale."""
+    stmt = (
+        select(AnalysisRun)
+        .where(AnalysisRun.session_id == session_id)
+        .order_by(AnalysisRun.created_at.desc())
+        .limit(1)
+    )
+    return db.scalar(stmt)
+
+
 def list_detection_events_by_session(
-    db: DBSession, session_id: str
+    db: DBSession, session_id: str, *, limit: int | None = None, offset: int = 0
 ) -> list[DetectionEvent]:
     stmt = (
         select(DetectionEvent)
@@ -72,11 +100,15 @@ def list_detection_events_by_session(
             selectinload(DetectionEvent.related_messages),
         )
     )
+    if offset:
+        stmt = stmt.offset(offset)
+    if limit is not None:
+        stmt = stmt.limit(limit)
     return list(db.scalars(stmt))
 
 
 def list_health_scores_by_session(
-    db: DBSession, session_id: str
+    db: DBSession, session_id: str, *, limit: int | None = None, offset: int = 0
 ) -> list[ContextHealthScore]:
     stmt = (
         select(ContextHealthScore)
@@ -84,6 +116,10 @@ def list_health_scores_by_session(
         .order_by(ContextHealthScore.measured_at.desc())
         .options(selectinload(ContextHealthScore.analysis_run))
     )
+    if offset:
+        stmt = stmt.offset(offset)
+    if limit is not None:
+        stmt = stmt.limit(limit)
     return list(db.scalars(stmt))
 
 

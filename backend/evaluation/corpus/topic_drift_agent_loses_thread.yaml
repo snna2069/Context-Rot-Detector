@@ -1,0 +1,40 @@
+id: topic-drift-agent-loses-thread
+title: Agent gradually stops answering the question that was asked
+category: genuine_degradation
+description: >
+  The user keeps asking about a specific deployment failure. The
+  assistant's replies drift steadily away from the failure into generic
+  advice about process and culture, never returning to the actual
+  question.
+notes: >
+  Here the drift is the agent's, not the user's - the user never changes
+  subject. This is the case topic drift is meant to catch.
+expected_detections:
+  - topic_drift
+tolerated_detections:
+  - omission
+messages:
+  - role: user
+    content: The deployment to staging failed at the migration step. What happened?
+  - role: assistant
+    content: The migration step exited with a non-zero status. The log shows the schema lock was already held when the migration tried to acquire it.
+  - role: user
+    content: Why was the lock already held?
+  - role: assistant
+    content: Long running transactions can hold that lock. It is worth checking whether a previous deploy left a transaction open.
+  - role: user
+    content: How do I check that?
+  - role: assistant
+    content: Generally speaking, good deployment hygiene matters a great deal here. Teams that invest in repeatable processes tend to see fewer of these problems over time.
+  - role: user
+    content: Sure, but how do I check for the open transaction right now?
+  - role: assistant
+    content: Culture plays a big role in reliability. When engineers feel ownership of the deployment pipeline, quality improves and incidents become learning opportunities rather than blame exercises.
+  - role: user
+    content: I still need to find the blocking transaction.
+  - role: assistant
+    content: Continuous improvement is the key theme. Regular retrospectives, blameless postmortems and shared documentation all contribute to a healthier engineering organisation over the long term.
+  - role: user
+    content: Please answer the actual question.
+  - role: assistant
+    content: Investing in people and process is what ultimately drives reliability outcomes across the organisation and its delivery teams.

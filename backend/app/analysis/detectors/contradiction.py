@@ -56,15 +56,26 @@ from __future__ import annotations
 from app.analysis.context import SessionContext
 from app.analysis.signals import Evidence, Signal
 from app.analysis.statements import extract_statements
-from app.analysis.text_utils import text_similarity_ratio
+from app.analysis.text_utils import (
+    extract_numbers,
+    numeric_conflict,
+    text_similarity_ratio,
+)
 from app.models import DetectionSeverity, DetectionType, MessageRole
 
 VALUE_DIFFERENCE_THRESHOLD = 0.6
 MAX_CONFIDENCE = 0.85
+# Confidence used when two values disagree on a number. Numeric
+# disagreement is a much stronger and less ambiguous signal than lexical
+# dissimilarity, so it is scored above the lexical floor but still short
+# of certainty -- the values may be describing different things the
+# subject extractor conflated.
+NUMERIC_CONFLICT_CONFIDENCE = 0.8
 
 
 class ContradictionDetector:
     name = "contradiction"
+    detection_types = frozenset({DetectionType.CONTRADICTION})
 
     def detect(self, context: SessionContext) -> list[Signal]:
         signals: list[Signal] = []
@@ -88,12 +99,37 @@ class ContradictionDetector:
             for i in range(1, len(occurrences)):
                 earlier_message, earlier_value = occurrences[i - 1]
                 later_message, later_value = occurrences[i]
-                similarity = text_similarity_ratio(earlier_value, later_value)
-                difference = 1 - similarity
-                if difference < VALUE_DIFFERENCE_THRESHOLD:
+
+                # An update the user themselves supplied is not the agent
+                # contradicting itself -- it is the agent correctly
+                # incorporating new information. Flagging it would train
+                # users to ignore the tool, so it is suppressed here.
+                if self._user_supplied_value(
+                    context, earlier_message, later_message, later_value
+                ):
                     continue
 
-                confidence = min(MAX_CONFIDENCE, round(0.5 + 0.35 * difference, 3))
+                # Numeric disagreement is checked first and independently
+                # of lexical similarity: two values can be textually
+                # near-identical ("30 seconds" / "5 seconds") while
+                # asserting incompatible facts.
+                numbers_conflict = numeric_conflict(earlier_value, later_value)
+                similarity = text_similarity_ratio(earlier_value, later_value)
+                difference = 1 - similarity
+
+                if numbers_conflict:
+                    confidence = NUMERIC_CONFLICT_CONFIDENCE
+                    basis = "numeric"
+                elif numbers_conflict is False:
+                    # Same numbers on both sides: the values agree on the
+                    # only part that is precisely comparable, so lexical
+                    # difference alone is not treated as a contradiction.
+                    continue
+                elif difference >= VALUE_DIFFERENCE_THRESHOLD:
+                    confidence = min(MAX_CONFIDENCE, round(0.5 + 0.35 * difference, 3))
+                    basis = "lexical"
+                else:
+                    continue
                 signals.append(
                     Signal(
                         detector_name=self.name,
@@ -125,8 +161,48 @@ class ContradictionDetector:
                             "subject": subject,
                             "earlier_value": earlier_value,
                             "later_value": later_value,
+                            "comparison_basis": basis,
                             "external_verification_available": has_tool_results,
                         },
                     )
                 )
         return signals
+
+    @staticmethod
+    def _user_supplied_value(
+        context: SessionContext,
+        earlier_message,
+        later_message,
+        later_value: str,
+    ) -> bool:
+        """Did a non-assistant turn introduce the new value in between?
+
+        Deliberately conservative: it only suppresses when the *specific*
+        new value (its numbers, or the value text itself) appears in a
+        user/system/developer message positioned between the two
+        assistant statements. That is strong evidence the change was
+        instructed rather than invented.
+        """
+        authored_roles = {
+            MessageRole.USER,
+            MessageRole.SYSTEM,
+            MessageRole.DEVELOPER,
+        }
+        later_numbers = set(extract_numbers(later_value))
+        normalized_value = later_value.strip().lower()
+
+        for message in context.messages:
+            if not (
+                earlier_message.sequence_number
+                < message.sequence_number
+                < later_message.sequence_number
+            ):
+                continue
+            if message.role not in authored_roles:
+                continue
+            content = message.content.lower()
+            if later_numbers and later_numbers <= set(extract_numbers(content)):
+                return True
+            if len(normalized_value) > 2 and normalized_value in content:
+                return True
+        return False

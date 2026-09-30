@@ -5,13 +5,26 @@ existence checks for ingestion. API routes call these functions and never
 touch repositories or the ORM session directly, and repositories never
 enforce business rules -- they only read/write rows. This keeps the rules
 in one place, provider-agnostic, and independently testable.
+
+Concurrency note: the pre-insert checks below (duplicate lookups, "next
+sequence number") are read-then-write sequences, so two simultaneous
+requests for the same session can both pass validation before either
+commits. The database's unique constraints are the actual source of
+truth; `_commit_or_conflict` translates the resulting `IntegrityError`
+into a domain `ConflictError` so a lost race returns 409 (retryable)
+instead of a 500.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from app.errors import (
+    ConcurrentIngestionError,
     DuplicateMessageError,
     DuplicateToolCallIndexError,
     DuplicateToolResultError,
@@ -31,14 +44,34 @@ from app.schemas.tool_calls import ToolCallCreate
 from app.schemas.tool_results import ToolResultCreate
 
 
+def _commit_or_conflict(db: DBSession, detail: str) -> Iterator[None]:
+    """Guard an insert+commit, converting a lost race into a 409.
+
+    Covers the whole write, not just `commit()`: the repositories
+    `flush()` on insert, so a unique-constraint violation usually
+    surfaces there rather than at commit time. Without this a concurrent
+    writer that wins the race makes the loser's request fail with an
+    opaque 500, which is both misleading and not obviously retryable.
+    """
+    try:
+        yield
+    except IntegrityError as exc:
+        db.rollback()
+        raise ConcurrentIngestionError(detail) from exc
+
+
+_commit_or_conflict = contextmanager(_commit_or_conflict)
+
+
 def create_session(db: DBSession, payload: AgentSessionCreate) -> AgentSession:
-    session = sessions_repo.create(
-        db,
-        name=payload.name,
-        started_at=payload.started_at or utc_now(),
-        session_metadata=payload.session_metadata,
-    )
-    db.commit()
+    with _commit_or_conflict(db, "Could not create the session."):
+        session = sessions_repo.create(
+            db,
+            name=payload.name,
+            started_at=payload.started_at or utc_now(),
+            session_metadata=payload.session_metadata,
+        )
+        db.commit()
     db.refresh(session)
     return session
 
@@ -85,15 +118,22 @@ def add_message(db: DBSession, session_id: str, payload: MessageCreate) -> Messa
         provider_message_id=payload.provider_message_id,
         message_metadata=payload.message_metadata,
     )
-    messages_repo.create(db, message)
-    db.commit()
+    with _commit_or_conflict(
+        db,
+        f"Could not record message with sequence_number {sequence_number} "
+        f"in session '{session_id}'.",
+    ):
+        messages_repo.create(db, message)
+        db.commit()
     db.refresh(message)
     return message
 
 
-def list_messages(db: DBSession, session_id: str) -> list[Message]:
+def list_messages(
+    db: DBSession, session_id: str, *, limit: int = 500, offset: int = 0
+) -> list[Message]:
     get_session(db, session_id)
-    return messages_repo.list_by_session(db, session_id)
+    return messages_repo.list_by_session(db, session_id, limit=limit, offset=offset)
 
 
 def add_tool_call(
@@ -122,8 +162,13 @@ def add_tool_call(
         arguments=payload.arguments,
         created_at=payload.created_at or utc_now(),
     )
-    tool_calls_repo.create(db, tool_call)
-    db.commit()
+    with _commit_or_conflict(
+        db,
+        f"Could not record tool call with call_index {call_index} "
+        f"on message '{message_id}'.",
+    ):
+        tool_calls_repo.create(db, tool_call)
+        db.commit()
     db.refresh(tool_call)
     return tool_call
 
@@ -147,13 +192,18 @@ def add_tool_result(
         is_error=payload.is_error,
         created_at=payload.created_at or utc_now(),
     )
-    tool_results_repo.create(db, tool_result)
-    db.commit()
+    with _commit_or_conflict(
+        db, f"Could not record a tool result for tool call '{tool_call_id}'."
+    ):
+        tool_results_repo.create(db, tool_result)
+        db.commit()
     db.refresh(tool_result)
     return tool_result
 
 
-def get_timeline(db: DBSession, session_id: str) -> tuple[AgentSession, list[Message]]:
+def get_timeline(
+    db: DBSession, session_id: str, *, limit: int = 500, offset: int = 0
+) -> tuple[AgentSession, list[Message]]:
     session = get_session(db, session_id)
-    messages = messages_repo.list_by_session(db, session_id)
+    messages = messages_repo.list_by_session(db, session_id, limit=limit, offset=offset)
     return session, messages

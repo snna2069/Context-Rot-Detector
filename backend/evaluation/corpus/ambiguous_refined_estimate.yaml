@@ -1,0 +1,31 @@
+id: ambiguous-refined-estimate
+title: Agent refines an estimate as it learns more
+category: ambiguous
+description: >
+  The assistant gives a rough sizing early, then a different, more
+  precise number later after gathering detail. Whether this is a
+  contradiction or healthy refinement is genuinely arguable.
+notes: >
+  A reviewer could reasonably call this either way, so contradiction is
+  tolerated rather than expected. Scenarios like this exist to stop the
+  corpus from pretending every case is clear-cut.
+expected_detections: []
+tolerated_detections:
+  - contradiction
+messages:
+  - role: user
+    content: Roughly how long will the data migration take?
+  - role: assistant
+    content: Without knowing the row counts I would estimate the migration duration is about 2 hours, but that is a rough figure.
+  - role: user
+    content: The orders table has 40 million rows and the events table has 900 million.
+  - role: assistant
+    content: That is considerably larger than I assumed. Let me reconsider with those numbers.
+  - role: user
+    content: Please do.
+  - role: assistant
+    content: With 900 million event rows the dominant cost is the events copy. The migration duration is about 11 hours on the hardware you described, assuming no index rebuild in the same window.
+  - role: user
+    content: Can we shorten it?
+  - role: assistant
+    content: Yes, by copying events in parallel partitions and deferring index creation until after the copy completes.

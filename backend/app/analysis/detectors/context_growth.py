@@ -51,6 +51,7 @@ GROWTH_RATIO_THRESHOLD = 2.0
 
 class ContextGrowthDetector:
     name = "context_growth"
+    detection_types = frozenset({DetectionType.CONTEXT_GROWTH})
 
     def detect(self, context: SessionContext) -> list[Signal]:
         messages = context.messages

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session as DBSession
 
 from app.database import get_db
 from app.schemas.analysis import (
     AnalysisRunRead,
     AnalysisRunResult,
+    AnalysisStatusRead,
     ContextHealthScoreRead,
     DetectionEventRead,
     HealthChangeExplanationRead,
@@ -38,17 +39,70 @@ def analyze_session(
 
 @router.get("/{session_id}/detection-events", response_model=list[DetectionEventRead])
 def list_detection_events(
-    session_id: str, db: DBSession = Depends(get_db)
+    session_id: str,
+    limit: int = Query(default=500, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: DBSession = Depends(get_db),
 ) -> list[DetectionEventRead]:
-    events = analysis_service.list_detection_events(db, session_id)
+    events = analysis_service.list_detection_events(
+        db, session_id, limit=limit, offset=offset
+    )
     return [DetectionEventRead.from_orm_event(event) for event in events]
+
+
+@router.get("/{session_id}/analysis-status", response_model=AnalysisStatusRead)
+def get_analysis_status(
+    session_id: str, db: DBSession = Depends(get_db)
+) -> AnalysisStatusRead:
+    """Whether the stored analysis still covers the whole session.
+
+    Lets a client distinguish "analysed and clean" from "analysed a while
+    ago, and N messages have arrived since" -- the latter says nothing
+    about those newer messages.
+    """
+    status = analysis_service.get_analysis_status(db, session_id)
+    return AnalysisStatusRead(
+        latest_run=(
+            AnalysisRunRead.model_validate(status.latest_run)
+            if status.latest_run is not None
+            else None
+        ),
+        analyzed_through_sequence=status.analyzed_through_sequence,
+        latest_message_sequence=status.latest_message_sequence,
+        message_count=status.message_count,
+        messages_since_analysis=status.messages_since_analysis,
+        is_stale=status.is_stale,
+        has_been_analyzed=status.has_been_analyzed,
+    )
+
+
+@router.get("/{session_id}/analysis-runs", response_model=list[AnalysisRunRead])
+def list_analysis_runs(
+    session_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: DBSession = Depends(get_db),
+) -> list[AnalysisRunRead]:
+    """Recent analysis runs, newest first.
+
+    Exposes `status`, `error_message`, and `failed_detectors` so a client
+    can tell whether the stored detections/health score came from a run
+    where every detector actually completed. A `partial` or `failed` run
+    means absent signals are unknown, not absent.
+    """
+    runs = analysis_service.list_analysis_runs(db, session_id, limit=limit)
+    return [AnalysisRunRead.model_validate(run) for run in runs]
 
 
 @router.get("/{session_id}/health-scores", response_model=list[ContextHealthScoreRead])
 def list_health_scores(
-    session_id: str, db: DBSession = Depends(get_db)
+    session_id: str,
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: DBSession = Depends(get_db),
 ) -> list[ContextHealthScoreRead]:
-    scores = analysis_service.list_health_scores(db, session_id)
+    scores = analysis_service.list_health_scores(
+        db, session_id, limit=limit, offset=offset
+    )
     return [ContextHealthScoreRead.model_validate(score) for score in scores]
 
 

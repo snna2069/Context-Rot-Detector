@@ -1,5 +1,10 @@
-import { getHealthTrend, listHealthScores } from "@/lib/api/analysis";
+import {
+  getAnalysisStatus,
+  getHealthTrend,
+  listHealthScores,
+} from "@/lib/api/analysis";
 import { orNotFound } from "@/lib/api/client";
+import { AnalysisIntegrityNotice } from "@/components/AnalysisIntegrityNotice";
 import { EmptyState } from "@/components/EmptyState";
 import { HealthTrendChart } from "@/components/HealthTrendChart";
 import { HealthDimensionBreakdown } from "@/components/HealthDimensionBreakdown";
@@ -23,24 +28,31 @@ export default async function SessionHealthPage({
   params,
 }: PageProps<"/sessions/[sessionId]">) {
   const { sessionId } = await params;
-  const [scores, trend] = await Promise.all([
+  const [scores, trend, status] = await Promise.all([
     orNotFound(listHealthScores(sessionId)),
     orNotFound(getHealthTrend(sessionId)),
+    orNotFound(getAnalysisStatus(sessionId)),
   ]);
 
   if (scores.length === 0) {
     return (
-      <EmptyState
-        title="No health scores yet"
-        description={'Run analysis on this session ("Run analysis" above) to compute a context health score.'}
-      />
+      <div className="space-y-6">
+        <AnalysisIntegrityNotice status={status} />
+        <EmptyState
+          title="No health scores yet"
+          description={'Run analysis on this session ("Run analysis" above) to compute a context health score.'}
+        />
+      </div>
     );
   }
 
-  const latest = scores[scores.length - 1];
+  // Health scores come back newest-first from the API, so the most
+  // recent checkpoint is the first element, not the last.
+  const latest = scores[0];
 
   return (
     <div className="space-y-6">
+      <AnalysisIntegrityNotice status={status} />
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="inline-flex items-center gap-2 font-medium text-slate-900">

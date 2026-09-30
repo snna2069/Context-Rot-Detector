@@ -60,6 +60,7 @@ class SemanticContradictionDetector:
     """
 
     name = "semantic_contradiction"
+    detection_types = frozenset({DetectionType.CONTRADICTION})
 
     def __init__(self, provider: AnalysisProvider) -> None:
         self._provider = provider
@@ -138,6 +139,7 @@ class SemanticInstructionDriftDetector:
     """
 
     name = "semantic_instruction_drift"
+    detection_types = frozenset({DetectionType.INSTRUCTION_DRIFT})
 
     def __init__(self, provider: AnalysisProvider) -> None:
         self._provider = provider
@@ -209,6 +211,7 @@ class SemanticRelevanceDetector:
     """
 
     name = "semantic_relevance"
+    detection_types = frozenset({DetectionType.TOPIC_DRIFT})
 
     def __init__(self, provider: AnalysisProvider) -> None:
         self._provider = provider
@@ -301,6 +304,7 @@ class ClaimSupportDetector:
     """
 
     name = "claim_support"
+    detection_types = frozenset({DetectionType.UNSUPPORTED_CLAIM})
 
     def __init__(self, provider: AnalysisProvider) -> None:
         self._provider = provider

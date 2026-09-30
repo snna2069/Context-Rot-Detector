@@ -55,7 +55,16 @@ interface RequestOptions {
   body?: unknown;
   /** Query string parameters; `undefined` values are omitted. */
   query?: Record<string, string | number | undefined>;
+  /** Overrides the default request timeout for this call. */
+  timeoutMs?: number;
 }
+
+/**
+ * Default request timeout. Without one, a hung backend leaves a Server
+ * Component awaiting forever, which holds the request open and renders
+ * neither content nor an error.
+ */
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const url = new URL(path, apiBaseUrl);
@@ -71,9 +80,18 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
 
 export async function apiFetch<T>(
   path: string,
-  options: RequestOptions = {},
+  options: RequestOptions & {
+    /**
+     * Validates/narrows the parsed response body. Without one the body
+     * is returned as `T` on trust, so a backend shape change surfaces
+     * as a confusing render-time crash deep inside a component rather
+     * than as a clear API error here.
+     */
+    parse?: (body: unknown) => T;
+  } = {},
 ): Promise<T> {
   const url = buildUrl(path, options.query);
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   let response: Response;
   try {
@@ -88,8 +106,17 @@ export async function apiFetch<T>(
       // pages must reflect the latest ingested/analyzed state, so
       // responses are never cached.
       cache: "no-store",
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "TimeoutError") {
+      throw new ApiError(
+        0,
+        `Request to ${path} timed out after ${timeoutMs}ms. The backend at ` +
+          `${apiBaseUrl} is reachable but did not respond in time.`,
+        cause,
+      );
+    }
     throw new ApiError(
       0,
       `Could not reach the backend at ${apiBaseUrl}. Is it running?`,
@@ -118,5 +145,29 @@ export async function apiFetch<T>(
   if (response.status === 204) {
     return undefined as T;
   }
-  return (await response.json()) as T;
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch (cause) {
+    throw new ApiError(
+      response.status,
+      `Response from ${path} was not valid JSON.`,
+      cause,
+    );
+  }
+
+  if (options.parse) {
+    try {
+      return options.parse(body);
+    } catch (cause) {
+      throw new ApiError(
+        response.status,
+        `Response from ${path} did not match the expected shape: ` +
+          `${cause instanceof Error ? cause.message : String(cause)}`,
+        body,
+      );
+    }
+  }
+  return body as T;
 }

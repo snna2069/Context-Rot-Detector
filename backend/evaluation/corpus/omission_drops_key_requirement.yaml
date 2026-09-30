@@ -1,0 +1,29 @@
+id: omission-drops-key-requirement
+title: Agent silently drops a requirement the user marked as important
+category: genuine_degradation
+description: >
+  The user flags accessibility as important. When later asked for the
+  final summary of the work, the assistant lists everything except the
+  accessibility requirement.
+notes: >
+  The requirement is explicitly marked, directly relevant to the closing
+  question, and simply absent from the answer.
+expected_detections:
+  - omission
+messages:
+  - role: user
+    content: We are building the new checkout page. Important, it must meet WCAG AA accessibility standards - that is a hard requirement from legal.
+  - role: assistant
+    content: Understood, I will treat WCAG AA accessibility as a hard requirement for the checkout page alongside the functional work.
+  - role: user
+    content: We also need it to work offline for the basket step.
+  - role: assistant
+    content: Offline support for the basket step noted. That implies local persistence and a sync step when connectivity returns.
+  - role: user
+    content: And it should support three currencies at launch.
+  - role: assistant
+    content: Three currencies at launch, noted. That affects price formatting and the tax calculation.
+  - role: user
+    content: Can you give me the final summary of all the checkout page requirements?
+  - role: assistant
+    content: Here is the summary of the checkout page requirements. First, offline support for the basket step with local persistence and a sync on reconnect. Second, support for three currencies at launch, including price formatting and tax handling. Those are the requirements to size for this iteration.

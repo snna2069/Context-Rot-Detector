@@ -1,0 +1,10 @@
+id: sparse-empty-session
+title: Session with no messages
+category: sparse_context
+description: A session that was created but never received any messages.
+notes: >
+  Nothing can be concluded from an empty session. Any signal here is a
+  false positive, and this is also the edge case most likely to crash a
+  detector.
+expected_detections: []
+messages: []

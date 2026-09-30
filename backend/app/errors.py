@@ -77,3 +77,20 @@ class DuplicateToolResultError(ConflictError):
         super().__init__(
             f"A tool result already exists for tool call '{tool_call_id}'."
         )
+
+
+class ConcurrentIngestionError(ConflictError):
+    """Raised when a concurrent writer won a race for the same slot.
+
+    Ingestion validates (duplicate checks, next sequence number) before
+    inserting, so two simultaneous requests can both pass validation and
+    only collide at the database's unique constraint. That collision is a
+    conflict the client can retry, not an internal error, so it must not
+    surface as a 500.
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(
+            f"{detail} This usually means a concurrent request wrote the same "
+            "record first; retry the request."
+        )
