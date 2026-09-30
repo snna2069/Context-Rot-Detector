@@ -1,0 +1,28 @@
+id: benign-repeated-safety-warning
+title: Agent repeats a short safety caveat across related answers
+category: benign_variation
+description: >
+  Across several destructive database operations the assistant repeats a
+  similar "take a backup first" caveat. The surrounding answers are all
+  different and the repetition is deliberate and useful.
+notes: >
+  Repeating a warning is good practice, not degradation. A similarity
+  based detector may still flag it, which would be a false positive.
+expected_detections: []
+messages:
+  - role: user
+    content: How do I drop the old audit table?
+  - role: assistant
+    content: Use a plain drop table statement inside a transaction so you can roll back if something looks wrong. Please take a verified backup before you run this, since the operation cannot be undone afterwards.
+  - role: user
+    content: And how do I truncate the staging events table?
+  - role: assistant
+    content: Truncate is faster than delete because it does not scan rows, and it resets the identity sequence. Please take a verified backup before you run this, since the operation cannot be undone afterwards.
+  - role: user
+    content: What about removing the unused index on orders?
+  - role: assistant
+    content: Drop the index concurrently so that reads and writes to orders are not blocked while it is removed. Please take a verified backup before you run this, since the operation cannot be undone afterwards.
+  - role: user
+    content: Thanks, that covers the cleanup.
+  - role: assistant
+    content: Happy to help. Run them one at a time and confirm each result before moving to the next.

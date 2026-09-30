@@ -25,32 +25,54 @@ Limitations
   user is indistinguishable from unintentional drift.
 - Sensitive to window size: very short windows are noisy, very long
   windows smooth out real drift.
-- Only compares each window to the one immediately before it, so a slow,
-  gradual drift across many windows may not cross the threshold at any
-  single step even though the cumulative drift is large.
+- Measured against the session's accumulated vocabulary, so a session
+  that drifts steadily from its very first turn (never establishing a
+  baseline topic) is harder to flag than one that drifts away from an
+  established subject.
 
 False positives
 -----------------
 - A user deliberately changing the subject mid-session ("actually, let's
   talk about something else") will also trigger this signal.
 
+Why the comparison is cumulative
+-----------------
+An earlier version compared each window only against the one immediately
+before it. That measured "did the vocabulary change since the last few
+messages?", which is true of essentially every productive conversation as
+it moves through sub-topics -- so the detector fired on healthy sessions
+at near-maximum confidence. Measured against the labeled corpus it had
+12.5% precision and a 37% false-positive rate (see `evaluation/`).
+
+Comparing against the union of everything said earlier instead asks a
+different and much more relevant question: "has this block of messages
+left the topic the session actually established?" Returning to an earlier
+theme, or elaborating on it with new words, keeps a healthy overlap;
+genuinely wandering off does not.
+
 Confidence calculation
 -----------------
-`confidence` = `1 - similarity`, only reported when `similarity` is below
-`DRIFT_SIMILARITY_THRESHOLD` and both windows have enough vocabulary
-(`MIN_WINDOW_WORDS`) to make the comparison meaningful.
+Reported only when cumulative overlap falls below
+`DRIFT_SIMILARITY_THRESHOLD`. Confidence scales with how far below the
+threshold the overlap sits, capped at `MAX_CONFIDENCE`. It is *not* a
+probability that the session is degraded -- a deliberate topic change
+produces the same measurement as unintentional drift.
 """
 
 from __future__ import annotations
 
 from app.analysis.context import SessionContext
 from app.analysis.signals import Evidence, Signal
-from app.analysis.text_utils import content_words, jaccard_similarity
+from app.analysis.text_utils import containment_ratio, content_words
 from app.models import DetectionSeverity, DetectionType
 
 WINDOW_SIZE = 4
 MIN_WINDOW_WORDS = 6
-DRIFT_SIMILARITY_THRESHOLD = 0.12
+# Fraction of a window's content words that must already appear in the
+# session's established vocabulary. Below this, the block is mostly
+# talking about something the session has not been talking about.
+MIN_CONTINUITY_RATIO = 0.2
+MAX_CONFIDENCE = 0.6
 
 
 class TopicDriftDetector:
@@ -70,23 +92,29 @@ class TopicDriftDetector:
             return []
 
         signals: list[Signal] = []
-        previous_words: set[str] | None = None
-        previous_window = None
+        # Vocabulary established by every window seen so far, not just the
+        # previous one -- see the module docstring for why.
+        established_words: set[str] = set()
+        established_from = messages[0]
 
-        for window in windows:
+        for index, window in enumerate(windows):
             words: set[str] = set()
             for m in window:
                 words |= content_words(m.content)
 
             if (
-                previous_words is not None
-                and previous_window is not None
-                and len(previous_words) >= MIN_WINDOW_WORDS
+                index > 0
+                and len(established_words) >= MIN_WINDOW_WORDS
                 and len(words) >= MIN_WINDOW_WORDS
             ):
-                similarity = jaccard_similarity(previous_words, words)
-                if similarity < DRIFT_SIMILARITY_THRESHOLD:
-                    confidence = round(min(1.0, 1 - similarity), 3)
+                similarity = containment_ratio(words, established_words)
+                if similarity < MIN_CONTINUITY_RATIO:
+                    shortfall = (
+                        MIN_CONTINUITY_RATIO - similarity
+                    ) / MIN_CONTINUITY_RATIO
+                    confidence = round(
+                        min(MAX_CONFIDENCE, MAX_CONFIDENCE * shortfall), 3
+                    )
                     signals.append(
                         Signal(
                             detector_name=self.name,
@@ -95,19 +123,24 @@ class TopicDriftDetector:
                             confidence=confidence,
                             explanation=(
                                 "Vocabulary overlap between messages "
-                                f"{previous_window[0].sequence_number}-"
-                                f"{previous_window[-1].sequence_number} and "
+                                f"{established_from.sequence_number}-"
+                                f"{windows[index - 1][-1].sequence_number} and "
                                 f"{window[0].sequence_number}-"
                                 f"{window[-1].sequence_number} dropped to "
-                                f"{similarity:.0%}, suggesting a topic shift."
+                                f"{similarity:.0%} of the topic established so "
+                                "far, suggesting a topic shift. A deliberate "
+                                "change of subject looks the same as "
+                                "unintentional drift to this detector."
                             ),
                             evidence=tuple(
                                 Evidence(message_id=m.id, role="window") for m in window
                             ),
                             related_message_ids=tuple(m.id for m in window),
-                            metadata={"similarity": similarity},
+                            metadata={
+                                "similarity": similarity,
+                                "compared_against": "session_vocabulary",
+                            },
                         )
                     )
-            previous_words = words
-            previous_window = window
+            established_words |= words
         return signals

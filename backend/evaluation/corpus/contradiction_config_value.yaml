@@ -1,0 +1,34 @@
+id: contradiction-config-value
+title: Agent states two different values for the same setting
+category: genuine_degradation
+description: >
+  Over a debugging session the assistant first reports one connection
+  timeout, then later asserts a different one, with nothing in between
+  that would justify the change. This is the textbook contradiction case.
+notes: >
+  Nothing in the session authorises the change -- no new tool result, no
+  user correction -- so a reviewer would call this an inconsistency the
+  user should be warned about.
+expected_detections:
+  - contradiction
+messages:
+  - role: user
+    content: We are seeing intermittent failures talking to the payments service. Can you look into the client configuration?
+  - role: assistant
+    content: I checked the client configuration. The connection timeout is 30 seconds, which is generous for this endpoint, so slow responses are unlikely to be the cause on their own.
+  - role: user
+    content: What about the retry policy?
+  - role: assistant
+    content: Retries are set to three attempts with exponential backoff starting at 200 milliseconds. That looks reasonable.
+  - role: user
+    content: Could the pool be exhausted under load?
+  - role: assistant
+    content: The pool size is 20 connections. Under the traffic levels you described that should be sufficient, though it is worth watching during peak.
+  - role: user
+    content: Let's go back to timeouts. Summarise what we know.
+  - role: assistant
+    content: Summarising the client configuration. The connection timeout is 5 seconds, the retry count is three, and the pool size is 20 connections. The short timeout is the most likely contributor to the intermittent failures.
+  - role: user
+    content: So what do you recommend we change first?
+  - role: assistant
+    content: I would raise the timeout first and then re-measure before touching the retry policy.

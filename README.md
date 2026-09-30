@@ -168,6 +168,31 @@ covered by a PostgreSQL run -- JSON column behaviour, constraint
 enforcement, transactional DDL -- is only exercised in this mode, so run
 it before changing models or migrations.
 
+### Detection-quality evaluation
+
+The test suite answers "does the code behave as written?". A separate
+harness answers "do the detectors actually identify context rot, and is
+their confidence meaningful?":
+
+```powershell
+Set-Location backend
+.\.venv\Scripts\python.exe -m evaluation          # human-readable report
+.\.venv\Scripts\python.exe -m evaluation --json   # machine-readable
+```
+
+It runs the deterministic detectors over a labeled corpus of agent
+sessions in `backend/evaluation/corpus/` and reports per-detector
+precision, recall, false-positive rate and a confidence-calibration
+curve. No LLM is called, so a run is free, offline and reproducible.
+
+The corpus is small, author-written and single-labeled, so the numbers
+are a **regression baseline, not a measure of real-world accuracy**. The
+measured baseline is recorded in `backend/evaluation/baseline.json`, and
+`tests/test_evaluation_harness.py` fails if quality drops below it. Read
+`backend/evaluation/corpus/README.md` before adding scenarios -- labels
+must come from the scenario's intent, never from what the detectors
+happen to output.
+
 There is no CI/CD configured yet -- run these checks locally before
 committing.
 

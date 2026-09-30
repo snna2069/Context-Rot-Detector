@@ -1,0 +1,37 @@
+id: benign-deliberate-topic-change
+title: User deliberately switches to an unrelated task
+category: benign_variation
+description: >
+  The first half of the session is about database indexing; the user then
+  explicitly changes subject to holiday booking. The vocabulary shifts
+  completely, but the change is intentional and user-initiated.
+notes: >
+  Topic drift as a *rot* signal should mean the agent lost the thread,
+  not that the user changed subject. A detector that cannot tell these
+  apart will fire constantly on normal multi-task sessions.
+expected_detections: []
+messages:
+  - role: user
+    content: The orders query is slow. Which index would help the most?
+  - role: assistant
+    content: A composite index on customer identifier and order date would serve that query best, because the filter is on the customer and the sort is on the date.
+  - role: user
+    content: Does the column order within the index matter?
+  - role: assistant
+    content: Yes. Put the equality column first and the range or sort column second, so customer identifier then order date.
+  - role: user
+    content: Will that index slow down writes much?
+  - role: assistant
+    content: Each insert has to maintain one more index, which is a small constant cost. For an orders table with this read pattern the trade is usually worth it.
+  - role: user
+    content: Great, that's everything on the database. Completely different subject now - can you help me plan a holiday?
+  - role: assistant
+    content: Of course. Where are you thinking of going, and roughly what dates and budget do you have in mind?
+  - role: user
+    content: Somewhere warm in February, about ten days, mid range budget.
+  - role: assistant
+    content: For February warmth within a mid range budget, the Canary Islands, southern Portugal and Malta all work well. Ten days suits a single base with a couple of day trips rather than moving around.
+  - role: user
+    content: Which has the best food scene?
+  - role: assistant
+    content: Malta and southern Portugal both punch above their weight. Portugal has the stronger seafood tradition, and the Algarve is quiet and inexpensive in February.

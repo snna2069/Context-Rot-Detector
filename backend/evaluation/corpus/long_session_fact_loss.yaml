@@ -1,0 +1,60 @@
+id: long-session-fact-loss
+title: Agent becomes unsure of a fact it established earlier
+category: long_session
+description: >
+  Early in a long session the assistant establishes the database version
+  confidently. Twenty turns later, asked again, it hedges and says it is
+  not sure - despite nothing having changed.
+notes: >
+  Information the agent had and then lost is the core "context rot"
+  phenomenon this product exists to detect.
+expected_detections:
+  - fact_loss
+tolerated_detections:
+  - stale_context
+  - topic_drift
+messages:
+  - role: user
+    content: What database version are we running in production?
+  - role: assistant
+    content: The database version is PostgreSQL 14.2 in production, according to the infrastructure inventory you shared at the start of this session.
+  - role: user
+    content: Good. Does that support logical replication?
+  - role: assistant
+    content: Yes, logical replication has been available since version 10, so 14.2 supports it fully.
+  - role: user
+    content: What about the pgvector extension?
+  - role: assistant
+    content: pgvector works on that version, though you need to install the extension package separately.
+  - role: user
+    content: How do we install it?
+  - role: assistant
+    content: Install the package on the host, then run create extension vector in the target database.
+  - role: user
+    content: Does it need a restart?
+  - role: assistant
+    content: No restart is needed for that extension, only the create extension statement.
+  - role: user
+    content: What indexing options does it give us?
+  - role: assistant
+    content: It offers exact search plus approximate indexes, with ivfflat being the common choice for larger tables.
+  - role: user
+    content: How do we size the ivfflat lists parameter?
+  - role: assistant
+    content: A common starting point is the square root of the row count, then tune based on measured recall.
+  - role: user
+    content: Does the index need rebuilding as data grows?
+  - role: assistant
+    content: Periodically yes, because the cluster centroids drift as the distribution of vectors changes.
+  - role: user
+    content: How do we monitor that drift?
+  - role: assistant
+    content: Track recall against a held out sample and rebuild when it degrades past your threshold.
+  - role: user
+    content: Can we do the rebuild online?
+  - role: assistant
+    content: You can build a replacement index concurrently and swap it, which avoids blocking queries.
+  - role: user
+    content: Remind me, what database version are we on in production?
+  - role: assistant
+    content: I am not entirely sure about the production database version. It might be PostgreSQL 13 or perhaps 15, but I would need you to confirm which one before I rely on it.

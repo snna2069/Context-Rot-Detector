@@ -1,0 +1,26 @@
+id: repetition-agent-loops
+title: Agent repeats essentially the same answer three times
+category: genuine_degradation
+description: >
+  The user asks follow-up questions and the assistant returns to almost
+  identical wording each time, making no progress. A classic sign the
+  agent has stopped incorporating new context.
+expected_detections:
+  - repetition
+messages:
+  - role: user
+    content: How do I rotate the signing key without downtime?
+  - role: assistant
+    content: To rotate the signing key without downtime you should publish the new public key alongside the old one, wait for all verifiers to pick it up, then switch the signer over and finally retire the old key.
+  - role: user
+    content: How long should I wait between publishing and switching?
+  - role: assistant
+    content: To rotate the signing key without downtime you should publish the new public key alongside the old one, wait for all verifiers to pick it up, then switch the signer over and finally retire the old key.
+  - role: user
+    content: That did not answer the question about timing.
+  - role: assistant
+    content: To rotate the signing key without downtime you should publish the new public key alongside the old one, wait for all verifiers to pick it up, then switch the signer over and finally retire the old key.
+  - role: user
+    content: Please give me a concrete duration.
+  - role: assistant
+    content: The approach is to publish the new public key alongside the old one, wait for verifiers, then switch the signer and retire the old key.

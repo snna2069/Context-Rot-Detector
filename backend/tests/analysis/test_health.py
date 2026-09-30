@@ -62,12 +62,24 @@ def test_fact_loss_and_omission_penalize_information_retention() -> None:
     assert result.information_retention_score < single.information_retention_score
 
 
-def test_repetition_and_topic_drift_penalize_relevance() -> None:
-    result = compute_health_score([_signal(DetectionType.TOPIC_DRIFT)])
-    assert result.relevance_score < 1.0
-
+def test_repetition_penalizes_relevance() -> None:
     result = compute_health_score([_signal(DetectionType.REPETITION)])
     assert result.relevance_score < 1.0
+
+
+def test_topic_drift_is_informational_and_never_penalizes() -> None:
+    """Topic drift was reclassified on measured evidence.
+
+    Evaluated against the labeled corpus its lexical overlap measure
+    could not separate genuine drift from normal conversational
+    progression (12.5% precision, 37% false-positive rate), so it is
+    surfaced to users but must not push down a health score. See
+    `evaluation/corpus/README.md`.
+    """
+    result = compute_health_score([_signal(DetectionType.TOPIC_DRIFT)])
+
+    assert result.relevance_score == 1.0
+    assert result.overall_score == 1.0
 
 
 def test_context_growth_and_behavior_shift_never_penalize_any_dimension() -> None:

@@ -1,0 +1,58 @@
+id: benign-healthy-long-session
+title: A long, focused, entirely healthy session
+category: benign_variation
+description: >
+  Fifteen messages of coherent, on-topic technical work. The agent stays
+  consistent, honours the constraints, uses its tool result, and makes
+  steady progress.
+notes: >
+  The most important control in the corpus. If anything fires here, that
+  is a pure false positive on a session with no degradation whatsoever.
+expected_detections: []
+messages:
+  - role: user
+    content: I want to add full text search to our product catalogue. Constraint, keep it inside PostgreSQL rather than adding a search cluster.
+  - role: assistant
+    content: Understood, I will keep the design within PostgreSQL. The built in full text search should handle a product catalogue comfortably at most catalogue sizes.
+  - role: user
+    content: How do I index the product name and description together?
+  - role: assistant
+    content: Create a generated column holding the combined text search vector from name and description, then build a GIN index on that column.
+  - role: user
+    content: Should the two fields be weighted differently?
+  - role: assistant
+    content: Yes. Give the name a higher weight than the description using setweight, so a match in the product name ranks above a match buried in the body text.
+  - role: user
+    content: How do I query it and get sensible ordering?
+  - role: assistant
+    content: Match with the text search operator against a parsed query, then order by ts_rank on the same vector to get relevance ordering.
+  - role: user
+    content: Does it handle plurals and word stems?
+  - role: assistant
+    content: The English configuration applies stemming, so searching for cables will match cable. Choosing the right configuration for your language matters here.
+  - role: user
+    content: What about typos?
+  - role: assistant
+    content: Full text search does not correct typos. For that you would add trigram similarity with pg_trgm as a fallback when the primary search returns too few rows.
+  - role: user
+    content: Can you check how large the catalogue table currently is?
+  - role: assistant
+    content: Let me look that up.
+    tool_calls:
+      - tool_name: run_query
+        arguments:
+          sql: SELECT count(*) FROM products
+        result:
+          output:
+            count: 84000
+          is_error: false
+  - role: assistant
+    content: The catalogue has 84000 products. At that size a GIN index on the combined vector will be fast and the index itself stays small enough to sit comfortably in cache.
+  - role: user
+    content: Do I need to worry about index maintenance at that volume?
+  - role: assistant
+    content: Not much at 84000 rows. GIN has a pending list that is flushed periodically, and the default autovacuum settings will keep up at this scale.
+  - role: user
+    content: Great. Can you summarise the plan?
+  - role: assistant
+    content: The plan is a generated text search vector column combining name and description with a higher weight on name, a GIN index over it, queries ordered by ts_rank, and pg_trgm as a typo tolerant fallback. All of it stays inside PostgreSQL with no new search infrastructure, and at 84000 products the maintenance overhead is negligible.

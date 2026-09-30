@@ -97,7 +97,7 @@ def test_compute_health_score_marks_uncovered_types() -> None:
     score = compute_health_score(
         [],
         None,
-        assessed_types=frozenset({DetectionType.TOPIC_DRIFT}),
+        assessed_types=frozenset({DetectionType.REPETITION}),
     )
 
     assert score.relevance_score == 1.0

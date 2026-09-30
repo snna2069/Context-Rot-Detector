@@ -28,6 +28,19 @@ Design notes
   sub-scores below; they are surfaced as detection events but do not by
   themselves reduce the health score, per the instruction to never treat
   length/growth alone as rot.
+- `TOPIC_DRIFT` is informational for the same reason, on measured
+  evidence. Evaluated against the labeled corpus (see `evaluation/`), its
+  lexical vocabulary-overlap measure does not separate genuine drift from
+  normal conversational progression: the overlap ratios for sessions
+  where the agent truly lost the thread (0.085, 0.132) sit inside the
+  range produced by healthy sessions (0.067-0.296). It reached 12.5%
+  precision with a 37% false-positive rate, firing on 7 of 8 sessions
+  that had no degradation at all. No threshold separates the two
+  distributions, so the fix is not a tuning change: distinguishing a
+  deliberate topic change from lost context needs semantic similarity,
+  not word overlap. Until it can be shown to discriminate, the signal is
+  still surfaced for human review but must not silently push down a
+  health score that users are asked to trust.
 - Six dimensions are tracked (rather than one flat number) so a
   degrading score is explainable: which specific detector families are
   driving it. `REPETITION` is folded into `relevance` (repeated content
@@ -59,12 +72,12 @@ if TYPE_CHECKING:
     from app.config import Settings
 
 # Detection types that reduce each sub-score. A signal of a type not
-# listed here (currently only CONTEXT_GROWTH and BEHAVIOR_SHIFT) is
+# listed here (CONTEXT_GROWTH, BEHAVIOR_SHIFT and TOPIC_DRIFT) is
 # informational and never penalizes any sub-score.
 _CONSISTENCY_TYPES = {DetectionType.CONTRADICTION}
 _INSTRUCTION_ADHERENCE_TYPES = {DetectionType.INSTRUCTION_DRIFT}
 _INFORMATION_RETENTION_TYPES = {DetectionType.FACT_LOSS, DetectionType.OMISSION}
-_RELEVANCE_TYPES = {DetectionType.TOPIC_DRIFT, DetectionType.REPETITION}
+_RELEVANCE_TYPES = {DetectionType.REPETITION}
 _TOOL_UTILIZATION_TYPES = {DetectionType.TOOL_RESULT_MISUSE}
 _HALLUCINATION_RISK_TYPES = {DetectionType.UNSUPPORTED_CLAIM}
 
