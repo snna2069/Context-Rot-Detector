@@ -145,21 +145,28 @@ concurrency-conflict handling), every deterministic detector, the
 semantic analysis pipeline (mocked provider, no live LLM calls), health
 scoring, and analysis-failure handling.
 
-### Migration tests
+### Running the tests against PostgreSQL
 
-`tests/test_migrations.py` has two layers. The offline checks (revision
-chain integrity, downgrade coverage, SQL rendering) always run. The
-checks that apply the real migration chain to a real database -- including
-the model/migration drift check -- only run when `TEST_DATABASE_URL`
-points at a disposable PostgreSQL database, and are skipped otherwise:
+By default the suite runs on in-memory SQLite with the schema built by
+`Base.metadata.create_all()`, so it needs no database and never executes
+a migration. Set `TEST_DATABASE_URL` to run the **same** suite against a
+real PostgreSQL database whose schema is built by applying the Alembic
+migrations, which additionally enables the migration tests (including the
+model/migration drift check):
 
 ```powershell
-$env:TEST_DATABASE_URL = "postgresql+psycopg2://postgres:postgres@localhost:5432/context_rot_test"
-.\.venv\Scripts\python.exe -m pytest tests/test_migrations.py
+docker run -d --name crd-test-pg `
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres `
+  -e POSTGRES_DB=context_rot_test -p 55432:5432 postgres:16-alpine
+
+$env:TEST_DATABASE_URL = "postgresql+psycopg2://postgres:postgres@localhost:55432/context_rot_test"
+.\.venv\Scripts\python.exe -m pytest
 ```
 
-Note that the rest of the suite runs on in-memory SQLite, so
-PostgreSQL-specific behaviour is only exercised by these tests.
+Tear the container down with `docker rm -f crd-test-pg`. Anything not
+covered by a PostgreSQL run -- JSON column behaviour, constraint
+enforcement, transactional DDL -- is only exercised in this mode, so run
+it before changing models or migrations.
 
 There is no CI/CD configured yet -- run these checks locally before
 committing.

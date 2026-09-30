@@ -109,6 +109,13 @@ def test_full_chain_renders_to_sql_offline() -> None:
 
 @pytest.fixture
 def postgres_engine():
+    """A database this test module may freely upgrade and downgrade.
+
+    Teardown leaves the schema back at head rather than at base: the
+    shared session fixture in `conftest.py` runs the rest of the suite
+    against this same database, and would otherwise find its tables
+    dropped depending on test ordering.
+    """
     assert TEST_DATABASE_URL is not None
     engine = create_engine(TEST_DATABASE_URL, poolclass=None)
     config = _alembic_config(TEST_DATABASE_URL)
@@ -116,7 +123,7 @@ def postgres_engine():
     try:
         yield engine
     finally:
-        command.downgrade(config, "base")
+        command.upgrade(config, "head")
         engine.dispose()
 
 
