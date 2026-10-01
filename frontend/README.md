@@ -16,6 +16,12 @@ Open [http://localhost:3000](http://localhost:3000). The app expects the
 backend to be running (see the root README) and reads its base URL from
 `NEXT_PUBLIC_API_BASE_URL` (see `.env.example`).
 
+The frontend does not contain the backend API key. For an internal
+deployment, put the same value in the server-only `API_KEY` environment
+variable. Next.js uses it for server-rendered reads and the server-side
+analysis proxy; it is never exposed through `NEXT_PUBLIC_*` browser
+configuration.
+
 ## Structure
 
 - `src/app/` -- routes: sessions list (`/`), and per-session timeline,

@@ -58,7 +58,11 @@ export function getHealthTrend(sessionId: string): Promise<HealthTrend> {
  * not a page load), so it is kept separate from the read-only functions
  * above. */
 export function analyzeSession(sessionId: string): Promise<AnalysisRunResult> {
-  return apiFetch<AnalysisRunResult>(`/sessions/${sessionId}/analyze`, {
+  const path =
+    typeof window === "undefined"
+      ? `/sessions/${sessionId}/analyze`
+      : `/api/sessions/${sessionId}/analyze`;
+  return apiFetch<AnalysisRunResult>(path, {
     method: "POST",
   });
 }

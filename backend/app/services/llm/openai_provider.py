@@ -12,6 +12,7 @@ the codebase.
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 import httpx
@@ -56,9 +57,16 @@ class OpenAIAnalysisProvider:
         base_url: str,
         model: str,
         timeout_seconds: float = 20.0,
+        max_retries: int = 2,
+        retry_backoff_seconds: float = 0.25,
+        max_calls: int = 24,
         client: httpx.Client | None = None,
     ) -> None:
         self._model = model
+        self._max_retries = max(0, max_retries)
+        self._retry_backoff_seconds = max(0.0, retry_backoff_seconds)
+        self._max_calls = max(1, max_calls)
+        self._calls_made = 0
         self._client = client or httpx.Client(
             base_url=base_url,
             timeout=timeout_seconds,
@@ -161,27 +169,49 @@ class OpenAIAnalysisProvider:
     # -- internals --------------------------------------------------------
 
     def _complete_json(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
-        try:
-            response = self._client.post(
-                "/chat/completions",
-                json={
-                    "model": self._model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "temperature": 0,
-                    "response_format": {"type": "json_object"},
-                },
-            )
-        except httpx.HTTPError as exc:
-            raise LLMProviderError(f"request to LLM provider failed: {exc}") from exc
-
-        if response.status_code >= 400:
+        if self._calls_made >= self._max_calls:
             raise LLMProviderError(
-                f"LLM provider returned status {response.status_code}: "
-                f"{response.text[:500]}"
+                "LLM analysis call budget exhausted for this analysis run"
             )
+        self._calls_made += 1
+
+        request_body = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+        }
+        response: httpx.Response | None = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                response = self._client.post("/chat/completions", json=request_body)
+            except httpx.TimeoutException as exc:
+                if attempt >= self._max_retries:
+                    raise LLMProviderError(
+                        "LLM provider request timed out after retries"
+                    ) from exc
+            except httpx.HTTPError as exc:
+                if attempt >= self._max_retries:
+                    raise LLMProviderError(
+                        "LLM provider request failed after retries"
+                    ) from exc
+            else:
+                if response.status_code < 400:
+                    break
+                if (
+                    response.status_code not in {408, 409, 429}
+                    and response.status_code < 500
+                ) or attempt >= self._max_retries:
+                    raise LLMProviderError(
+                        f"LLM provider returned status {response.status_code}"
+                    )
+            time.sleep(self._retry_backoff_seconds * (2**attempt))
+
+        if response is None or response.status_code >= 400:
+            raise LLMProviderError("LLM provider did not return a usable response")
 
         try:
             body = response.json()

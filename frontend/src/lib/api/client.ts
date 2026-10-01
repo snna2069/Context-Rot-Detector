@@ -10,7 +10,9 @@ import { notFound } from "next/navigation";
  */
 
 const apiBaseUrl =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+  typeof window === "undefined"
+    ? (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000")
+    : window.location.origin;
 
 export class ApiError extends Error {
   readonly status: number;
@@ -99,6 +101,9 @@ export async function apiFetch<T>(
       method: options.method ?? "GET",
       headers: {
         Accept: "application/json",
+        ...(typeof window === "undefined" && process.env.API_KEY
+          ? { "X-API-Key": process.env.API_KEY }
+          : {}),
         ...(options.body ? { "Content-Type": "application/json" } : {}),
       },
       body: options.body ? JSON.stringify(options.body) : undefined,

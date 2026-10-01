@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session as DBSession
 
+from app.auth import require_api_key
 from app.database import get_db
 from app.schemas.messages import MessageCreate, MessageRead
 from app.schemas.sessions import AgentSessionCreate, AgentSessionRead
@@ -11,7 +12,9 @@ from app.schemas.tool_calls import ToolCallCreate, ToolCallRead
 from app.schemas.tool_results import ToolResultCreate, ToolResultRead
 from app.services import ingestion
 
-router = APIRouter(prefix="/sessions", tags=["sessions"])
+router = APIRouter(
+    prefix="/sessions", tags=["sessions"], dependencies=[Depends(require_api_key)]
+)
 
 
 @router.post("", response_model=AgentSessionRead, status_code=201)
