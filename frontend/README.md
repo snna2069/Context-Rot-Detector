@@ -51,3 +51,5 @@ npm test
 ```
 
 `npm test` runs the Vitest suite for `src/lib/format` and `src/lib/api`.
+It also covers the API boundary validators, session-tab accessibility
+state, and detection-event filter controls.

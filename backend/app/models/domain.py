@@ -345,6 +345,12 @@ class AnalysisRun(Base):
         ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False
     )
     analysis_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="semantic-prompts-v2"
+    )
+    provider_name: Mapped[str | None] = mapped_column(String(100))
+    model_name: Mapped[str | None] = mapped_column(String(200))
+    llm_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[AnalysisRunStatus] = mapped_column(
         String(20), default=AnalysisRunStatus.PENDING, nullable=False
     )

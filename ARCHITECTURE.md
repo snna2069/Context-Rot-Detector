@@ -1,7 +1,15 @@
 # Context Rot Detector Architecture
 
-Status: Phase 0 audit and minimum architecture proposal  
+Status: Historical Phase 0 audit and minimum architecture proposal
 Date: 2026-09-11
+
+This document is a historical snapshot of the Phase 0 repository state and
+proposal. The implementation has since added the backend domain model,
+Alembic migrations, deterministic and semantic analysis, API-key
+authentication, Docker Compose packaging, and GitHub Actions CI. For the
+current implementation and supported checks, use the root `README.md` and
+the code/tests they reference; do not interpret the Phase 0 inventory
+below as a current-state inventory.
 
 This document records the repository audit and the smallest architecture that can
 support evidence-based context-rot detection. It is intentionally a design

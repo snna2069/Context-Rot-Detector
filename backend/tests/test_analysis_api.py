@@ -35,6 +35,10 @@ def test_analyze_session_persists_and_returns_detected_contradiction(
 
     assert body["analysis_run"]["session_id"] == session_id
     assert body["analysis_run"]["status"] == "completed"
+    assert body["analysis_run"]["prompt_version"] == "semantic-prompts-v2"
+    assert body["analysis_run"]["provider_name"] == "unavailable"
+    assert body["analysis_run"]["model_name"] == "none"
+    assert body["analysis_run"]["llm_call_count"] == 0
     assert body["health_score"] is not None
     assert 0.0 <= body["health_score"]["overall_score"] <= 1.0
 

@@ -21,7 +21,10 @@ export function SessionTabs({ sessionId }: { sessionId: string }) {
   const basePath = `/sessions/${sessionId}`;
 
   return (
-    <nav className="flex flex-wrap gap-1 rounded-lg bg-slate-100/80 p-1 text-sm">
+    <nav
+      aria-label="Session views"
+      className="flex flex-wrap gap-1 rounded-lg bg-slate-100/80 p-1 text-sm"
+    >
       {TABS.map((tab) => {
         const href = tab.segment ? `${basePath}/${tab.segment}` : basePath;
         const isActive =
@@ -33,6 +36,7 @@ export function SessionTabs({ sessionId }: { sessionId: string }) {
           <Link
             key={tab.segment || "timeline"}
             href={href}
+            aria-current={isActive ? "page" : undefined}
             className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-all ${
               isActive
                 ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"

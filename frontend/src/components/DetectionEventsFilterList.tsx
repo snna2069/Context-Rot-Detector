@@ -41,9 +41,11 @@ export function DetectionEventsFilterList({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-wrap gap-1.5">
+        <fieldset className="flex flex-wrap gap-1.5">
+          <legend className="sr-only">Filter by severity</legend>
           <button
             onClick={() => setSeverityFilter("all")}
+            aria-pressed={severityFilter === "all"}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${
               severityFilter === "all"
                 ? "bg-slate-900 text-white"
@@ -56,6 +58,7 @@ export function DetectionEventsFilterList({
             <button
               key={severity}
               onClick={() => setSeverityFilter(severity)}
+              aria-pressed={severityFilter === severity}
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition ${
                 severityFilter === severity
                   ? "bg-slate-900 text-white"
@@ -66,9 +69,13 @@ export function DetectionEventsFilterList({
               {severityLabels[severity]}
             </button>
           ))}
-        </div>
+        </fieldset>
         <div className="ml-auto">
+          <label htmlFor="detection-type-filter" className="sr-only">
+            Filter by detection type
+          </label>
           <select
+            id="detection-type-filter"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
             className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"

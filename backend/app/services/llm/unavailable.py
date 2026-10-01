@@ -32,6 +32,10 @@ _NO_PROVIDER_EXPLANATION = (
 class UnavailableAnalysisProvider:
     """Returns a safe, zero-confidence result for every capability."""
 
+    provider_name = PROVIDER_NAME
+    model_name = MODEL_NAME
+    call_count = 0
+
     def extract_important_facts(self, text: str) -> ImportantFactsResult:
         return ImportantFactsResult(
             confidence=0.0,

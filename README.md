@@ -193,8 +193,39 @@ measured baseline is recorded in `backend/evaluation/baseline.json`, and
 must come from the scenario's intent, never from what the detectors
 happen to output.
 
-There is no CI/CD configured yet -- run these checks locally before
-committing.
+CI also runs these checks; run them locally before committing for faster
+feedback.
+
+### Docker Compose
+
+The repository includes a minimal single-service deployment shape with
+PostgreSQL, the FastAPI backend, and the Next.js frontend:
+
+```powershell
+docker compose up --build
+```
+
+The backend applies Alembic migrations before starting. Open
+`http://localhost:3000`; the API is available at `http://localhost:8000`.
+The compose setup is intended for local/internal deployment, not as a
+complete production orchestration or secret-management solution.
+
+### CI
+
+`.github/workflows/ci.yml` runs backend linting, the full backend suite
+against a migration-built PostgreSQL service, the detection-quality
+baseline, frontend lint/tests/build, and both container builds. The
+PostgreSQL job is important: SQLite remains useful for fast local tests,
+but CI also exercises the production database engine and the real
+migration chain.
+
+### Analysis provenance
+
+Every `AnalysisRun` records `analysis_version`, `prompt_version`,
+`provider_name`, `model_name`, and `llm_call_count`. This identifies which
+detector/prompt/provider configuration produced persisted results without
+persisting raw prompt text or duplicating session content. The prompt
+version is currently `semantic-prompts-v2`.
 
 ### Internal-service security
 

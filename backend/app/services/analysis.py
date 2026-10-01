@@ -41,6 +41,7 @@ from app.repositories import tool_calls as tool_calls_repo
 from app.repositories import tool_results as tool_results_repo
 from app.services.ingestion import get_session
 from app.services.llm.factory import get_analysis_provider
+from app.services.llm.prompts import PROMPT_VERSION
 from app.services.llm.provider import AnalysisProvider
 
 # Identifies which version of the detector set produced a given
@@ -116,6 +117,10 @@ def run_analysis(
     analysis_run = AnalysisRun(
         session_id=session.id,
         analysis_version=ANALYSIS_VERSION,
+        prompt_version=PROMPT_VERSION,
+        provider_name=getattr(provider, "provider_name", None),
+        model_name=getattr(provider, "model_name", None),
+        llm_call_count=int(getattr(provider, "call_count", 0)),
         status=status,
         input_sequence_start=messages[0].sequence_number if messages else None,
         input_sequence_end=messages[-1].sequence_number if messages else None,

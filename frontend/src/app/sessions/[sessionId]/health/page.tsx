@@ -5,6 +5,7 @@ import {
 } from "@/lib/api/analysis";
 import { orNotFound } from "@/lib/api/client";
 import { AnalysisIntegrityNotice } from "@/components/AnalysisIntegrityNotice";
+import { AnalysisProvenance } from "@/components/AnalysisProvenance";
 import { EmptyState } from "@/components/EmptyState";
 import { HealthTrendChart } from "@/components/HealthTrendChart";
 import { HealthDimensionBreakdown } from "@/components/HealthDimensionBreakdown";
@@ -38,6 +39,7 @@ export default async function SessionHealthPage({
     return (
       <div className="space-y-6">
         <AnalysisIntegrityNotice status={status} />
+        <AnalysisProvenance run={status.latest_run} />
         <EmptyState
           title="No health scores yet"
           description={'Run analysis on this session ("Run analysis" above) to compute a context health score.'}

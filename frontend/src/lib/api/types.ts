@@ -151,6 +151,10 @@ export interface AnalysisRun {
   id: string;
   session_id: string;
   analysis_version: string;
+  prompt_version: string;
+  provider_name: string | null;
+  model_name: string | null;
+  llm_call_count: number;
   status: AnalysisRunStatus;
   input_sequence_start: number | null;
   input_sequence_end: number | null;

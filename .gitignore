@@ -1,0 +1,27 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+backend/.venv/
+backend/.pytest_cache/
+backend/.ruff_cache/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/coverage/
+
+# Local evaluation output
+backend/evaluation-report.json
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

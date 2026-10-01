@@ -63,6 +63,18 @@ function expectRunStatus(value: unknown): AnalysisRunStatus {
 export function parseAnalysisRun(value: unknown): AnalysisRun {
   const run = expectObject(value, "an analysis run object");
   expectRunStatus(run.status);
+  if (typeof run.prompt_version !== "string") {
+    fail("prompt_version to be a string", run.prompt_version);
+  }
+  if (run.provider_name !== null && typeof run.provider_name !== "string") {
+    fail("provider_name to be a string or null", run.provider_name);
+  }
+  if (run.model_name !== null && typeof run.model_name !== "string") {
+    fail("model_name to be a string or null", run.model_name);
+  }
+  if (typeof run.llm_call_count !== "number") {
+    fail("llm_call_count to be a number", run.llm_call_count);
+  }
   expectArray(run.failed_detectors ?? [], "failed_detectors to be an array");
   return {
     ...(run as unknown as AnalysisRun),

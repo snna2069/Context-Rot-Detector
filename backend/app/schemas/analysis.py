@@ -93,6 +93,10 @@ class AnalysisRunRead(BaseModel):
     id: str
     session_id: str
     analysis_version: str
+    prompt_version: str
+    provider_name: str | None
+    model_name: str | None
+    llm_call_count: int
     status: AnalysisRunStatus
     input_sequence_start: int | None
     input_sequence_end: int | None

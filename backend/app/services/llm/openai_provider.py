@@ -51,6 +51,8 @@ class OpenAIAnalysisProvider:
     signal this run" rather than crashing the analysis.
     """
 
+    provider_name = PROVIDER_NAME
+
     def __init__(
         self,
         api_key: str,
@@ -75,6 +77,14 @@ class OpenAIAnalysisProvider:
 
     def close(self) -> None:
         self._client.close()
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    @property
+    def call_count(self) -> int:
+        return self._calls_made
 
     # -- AnalysisProvider protocol ---------------------------------------
 
