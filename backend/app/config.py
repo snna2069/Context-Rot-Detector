@@ -16,6 +16,11 @@ class Settings(BaseSettings):
         default=["http://localhost:3000"],
         validation_alias="CORS_ORIGINS",
     )
+    api_key: str | None = Field(default=None, validation_alias="API_KEY")
+    auth_enabled: bool | None = Field(default=None, validation_alias="AUTH_ENABLED")
+    analysis_rate_limit_per_minute: int = Field(
+        default=60, validation_alias="ANALYSIS_RATE_LIMIT_PER_MINUTE"
+    )
 
     # Optional LLM provider for semantic analysis (Phase 5). When unset,
     # `app.services.llm.factory.get_analysis_provider` falls back to the
@@ -30,6 +35,13 @@ class Settings(BaseSettings):
     llm_model: str = Field(default="gpt-4o-mini", validation_alias="LLM_MODEL")
     llm_timeout_seconds: float = Field(
         default=20.0, validation_alias="LLM_TIMEOUT_SECONDS"
+    )
+    llm_max_retries: int = Field(default=2, validation_alias="LLM_MAX_RETRIES")
+    llm_retry_backoff_seconds: float = Field(
+        default=0.25, validation_alias="LLM_RETRY_BACKOFF_SECONDS"
+    )
+    llm_max_calls_per_analysis: int = Field(
+        default=24, validation_alias="LLM_MAX_CALLS_PER_ANALYSIS"
     )
 
     # Context-health scoring (Phase 6). These are deliberately configurable
@@ -65,6 +77,13 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def require_api_key(self) -> bool:
+        """Require API-key auth unless development explicitly opts out."""
+        if self.auth_enabled is not None:
+            return self.auth_enabled
+        return self.environment.lower() != "development"
 
 
 @lru_cache

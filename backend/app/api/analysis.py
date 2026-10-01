@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session as DBSession
 
+from app.auth import require_api_key
 from app.database import get_db
 from app.schemas.analysis import (
     AnalysisRunRead,
@@ -15,7 +16,9 @@ from app.schemas.analysis import (
 )
 from app.services import analysis as analysis_service
 
-router = APIRouter(prefix="/sessions", tags=["analysis"])
+router = APIRouter(
+    prefix="/sessions", tags=["analysis"], dependencies=[Depends(require_api_key)]
+)
 
 
 @router.post("/{session_id}/analyze", response_model=AnalysisRunResult, status_code=201)

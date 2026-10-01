@@ -116,6 +116,7 @@ class AgentSession(Base):
     __tablename__ = "agent_sessions"
     __table_args__ = (
         Index("ix_agent_sessions_status_updated_at", "status", "updated_at"),
+        Index("ix_agent_sessions_created_at", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -174,6 +175,11 @@ class Message(Base):
         ),
         Index("ix_messages_session_created_at", "session_id", "created_at"),
         Index("ix_messages_session_role", "session_id", "role"),
+        Index(
+            "ix_messages_session_provider_message_id",
+            "session_id",
+            "provider_message_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -205,6 +211,7 @@ class ToolCall(Base):
     __tablename__ = "tool_calls"
     __table_args__ = (
         Index("ix_tool_calls_session_created_at", "session_id", "created_at"),
+        Index("ix_tool_calls_session_call_index", "session_id", "call_index"),
         UniqueConstraint(
             "message_id", "call_index", name="uq_tool_calls_message_index"
         ),
@@ -368,6 +375,7 @@ class DetectionEvent(Base):
     __table_args__ = (
         Index("ix_detection_events_session_timestamp", "session_id", "timestamp"),
         Index("ix_detection_events_type_severity", "detection_type", "severity"),
+        Index("ix_detection_events_analysis_run_id", "analysis_run_id"),
         CheckConstraint(
             "confidence >= 0 AND confidence <= 1", name="ck_detection_confidence"
         ),

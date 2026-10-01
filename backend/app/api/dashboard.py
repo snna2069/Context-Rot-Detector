@@ -12,13 +12,18 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session as DBSession
 
+from app.auth import require_api_key
 from app.database import get_db
 from app.schemas.analysis import ContextHealthScoreRead
 from app.schemas.dashboard import SessionOverviewRead
 from app.schemas.sessions import AgentSessionRead
 from app.services import dashboard as dashboard_service
 
-router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+router = APIRouter(
+    prefix="/dashboard",
+    tags=["dashboard"],
+    dependencies=[Depends(require_api_key)],
+)
 
 
 @router.get("/sessions", response_model=list[SessionOverviewRead])

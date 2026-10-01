@@ -23,4 +23,7 @@ def get_analysis_provider(settings: Settings | None = None) -> AnalysisProvider:
         base_url=settings.llm_base_url,
         model=settings.llm_model,
         timeout_seconds=settings.llm_timeout_seconds,
+        max_retries=settings.llm_max_retries,
+        retry_backoff_seconds=settings.llm_retry_backoff_seconds,
+        max_calls=settings.llm_max_calls_per_analysis,
     )

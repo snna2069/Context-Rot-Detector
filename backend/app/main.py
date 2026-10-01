@@ -1,4 +1,7 @@
 import logging
+from collections import defaultdict, deque
+from threading import Lock
+from time import monotonic
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
@@ -28,6 +31,13 @@ logger = logging.getLogger(__name__)
 # This is a transport-level backstop; individual fields also enforce their
 # own, tighter size limits in the Pydantic schemas.
 MAX_REQUEST_BODY_BYTES = 2_000_000
+_analysis_requests: dict[str, deque[float]] = defaultdict(deque)
+_analysis_rate_lock = Lock()
+
+
+class _PayloadTooLargeError(Exception):
+    """Raised when a streamed request exceeds the transport body limit."""
+
 
 app = FastAPI(
     title=settings.app_name,
@@ -45,11 +55,54 @@ app.add_middleware(
 @app.middleware("http")
 async def limit_request_body_size(request: Request, call_next):
     content_length = request.headers.get("content-length")
-    if content_length is not None and int(content_length) > MAX_REQUEST_BODY_BYTES:
+    if content_length is not None and (
+        not content_length.isdigit() or int(content_length) > MAX_REQUEST_BODY_BYTES
+    ):
         return JSONResponse(
             status_code=413,
             content={"error": "payload_too_large"},
         )
+
+    received_bytes = 0
+    original_receive = request.receive
+
+    async def limited_receive():
+        nonlocal received_bytes
+        message = await original_receive()
+        if message["type"] == "http.request":
+            received_bytes += len(message.get("body", b""))
+            if received_bytes > MAX_REQUEST_BODY_BYTES:
+                raise _PayloadTooLargeError
+        return message
+
+    request._receive = limited_receive
+    try:
+        return await call_next(request)
+    except _PayloadTooLargeError:
+        return JSONResponse(
+            status_code=413,
+            content={"error": "payload_too_large"},
+        )
+
+
+@app.middleware("http")
+async def limit_analysis_rate(request: Request, call_next):
+    """Bound unauthenticated-cost amplification around synchronous analysis."""
+    if request.method == "POST" and request.url.path.endswith("/analyze"):
+        key = request.client.host if request.client else "unknown"
+        now = monotonic()
+        window_start = now - 60.0
+        with _analysis_rate_lock:
+            timestamps = _analysis_requests[key]
+            while timestamps and timestamps[0] <= window_start:
+                timestamps.popleft()
+            if len(timestamps) >= settings.analysis_rate_limit_per_minute:
+                return JSONResponse(
+                    status_code=429,
+                    headers={"Retry-After": "60"},
+                    content={"error": "analysis_rate_limit_exceeded"},
+                )
+            timestamps.append(now)
     return await call_next(request)
 
 

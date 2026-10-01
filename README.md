@@ -196,6 +196,21 @@ happen to output.
 There is no CI/CD configured yet -- run these checks locally before
 committing.
 
+### Internal-service security
+
+The API is designed for an internal single-service deployment in this
+phase. Set `API_KEY` in `backend/.env`; non-development environments
+require it and reject missing or incorrect `X-API-Key` headers with 401.
+When `AUTH_ENABLED` is omitted, development remains convenient without a
+key, while all other environments fail closed. Do not put the key in the
+frontend or in `NEXT_PUBLIC_*` configuration.
+
+`POST /sessions/{session_id}/analyze` is also protected by an in-process
+per-client rate limit (`ANALYSIS_RATE_LIMIT_PER_MINUTE`) and the LLM
+provider has bounded retries plus a per-analysis call budget. These are
+single-process safeguards, not a substitute for a gateway-level limit
+when running multiple replicas.
+
 ## Environment variables
 
 See `.env.example` for backend settings and `frontend/.env.example` for the
