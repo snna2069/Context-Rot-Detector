@@ -46,6 +46,7 @@ established fact -- capped at 0.8.
 from __future__ import annotations
 
 import re
+from bisect import bisect_left, bisect_right
 
 from app.analysis.context import SessionContext
 from app.analysis.signals import Evidence, Signal
@@ -87,6 +88,20 @@ class FactLossDetector:
         if not established:
             return []
 
+        user_messages = [m for m in context.messages if m.role == MessageRole.USER]
+        subject_patterns = {
+            subject: re.compile(rf"\b{re.escape(subject)}\b", re.IGNORECASE)
+            for subject in established
+        }
+        user_mentions = {
+            subject: [
+                message.sequence_number
+                for message in user_messages
+                if pattern.search(message.content)
+            ]
+            for subject, pattern in subject_patterns.items()
+        }
+
         for message in context.messages:
             if message.role != MessageRole.ASSISTANT:
                 continue
@@ -100,25 +115,15 @@ class FactLossDetector:
             for subject, (established_message, value) in established.items():
                 if established_message.sequence_number >= message.sequence_number:
                     continue
-                subject_pattern = re.compile(
-                    rf"\b{re.escape(subject)}\b", re.IGNORECASE
-                )
+                subject_pattern = subject_patterns[subject]
                 if not subject_pattern.search(lowered):
                     continue
 
                 confidence = BASE_CONFIDENCE
-                preceding_user_messages = [
-                    m
-                    for m in context.messages
-                    if m.role == MessageRole.USER
-                    and established_message.sequence_number
-                    < m.sequence_number
-                    < message.sequence_number
-                ]
-                if any(
-                    subject_pattern.search(m.content.lower())
-                    for m in preceding_user_messages
-                ):
+                mentions = user_mentions[subject]
+                left = bisect_right(mentions, established_message.sequence_number)
+                right = bisect_left(mentions, message.sequence_number)
+                if left < right:
                     confidence += STRONG_LINK_BONUS
                 confidence = min(MAX_CONFIDENCE, round(confidence, 3))
 

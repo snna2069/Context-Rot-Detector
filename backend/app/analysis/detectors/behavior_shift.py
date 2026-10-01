@@ -41,8 +41,6 @@ changed.
 
 from __future__ import annotations
 
-import statistics
-
 from app.analysis.context import SessionContext
 from app.analysis.signals import Evidence, Signal
 from app.models import DetectionSeverity, DetectionType, MessageRole
@@ -65,48 +63,51 @@ class BehaviorShiftDetector:
 
         signals: list[Signal] = []
         lengths = [len(m.content) for m in assistant_messages]
+        running_sum = sum(lengths[:MIN_HISTORY])
+        running_sum_squares = sum(length * length for length in lengths[:MIN_HISTORY])
 
         for i in range(MIN_HISTORY, len(assistant_messages)):
-            baseline = lengths[:i]
-            mean = statistics.fmean(baseline)
-            stdev = statistics.pstdev(baseline)
-            if stdev == 0:
-                continue
-
-            z_score = (lengths[i] - mean) / stdev
-            if abs(z_score) < Z_SCORE_THRESHOLD:
-                continue
-
-            confidence = min(
-                MAX_CONFIDENCE, round(abs(z_score) / (Z_SCORE_THRESHOLD * 2), 3)
-            )
-            message = assistant_messages[i]
-            direction = "longer" if z_score > 0 else "shorter"
-            signals.append(
-                Signal(
-                    detector_name=self.name,
-                    detection_type=DetectionType.BEHAVIOR_SHIFT,
-                    severity=DetectionSeverity.LOW,
-                    confidence=confidence,
-                    explanation=(
-                        f"Assistant message at sequence {message.sequence_number} "
-                        f"is {direction} ({len(message.content)} chars) than its "
-                        f"recent baseline ({mean:.0f} +/- {stdev:.0f} chars), a "
-                        f"{z_score:.1f} standard-deviation shift."
-                    ),
-                    evidence=(
-                        Evidence(
-                            message_id=message.id,
-                            excerpt=message.content[:200],
-                            role="deviating_message",
+            count = i
+            mean = running_sum / count
+            variance = max(0.0, running_sum_squares / count - mean * mean)
+            stdev = variance**0.5
+            if stdev != 0:
+                z_score = (lengths[i] - mean) / stdev
+                if abs(z_score) >= Z_SCORE_THRESHOLD:
+                    confidence = min(
+                        MAX_CONFIDENCE,
+                        round(abs(z_score) / (Z_SCORE_THRESHOLD * 2), 3),
+                    )
+                    message = assistant_messages[i]
+                    direction = "longer" if z_score > 0 else "shorter"
+                    signals.append(
+                        Signal(
+                            detector_name=self.name,
+                            detection_type=DetectionType.BEHAVIOR_SHIFT,
+                            severity=DetectionSeverity.LOW,
+                            confidence=confidence,
+                            explanation=(
+                                "Assistant message at sequence "
+                                f"{message.sequence_number} is {direction} "
+                                f"({len(message.content)} chars) than its recent "
+                                f"baseline ({mean:.0f} +/- {stdev:.0f} chars), a "
+                                f"{z_score:.1f} standard-deviation shift."
+                            ),
+                            evidence=(
+                                Evidence(
+                                    message_id=message.id,
+                                    excerpt=message.content[:200],
+                                    role="deviating_message",
+                                ),
+                            ),
+                            related_message_ids=(message.id,),
+                            metadata={
+                                "z_score": z_score,
+                                "baseline_mean": mean,
+                                "baseline_stdev": stdev,
+                            },
                         ),
-                    ),
-                    related_message_ids=(message.id,),
-                    metadata={
-                        "z_score": z_score,
-                        "baseline_mean": mean,
-                        "baseline_stdev": stdev,
-                    },
-                )
-            )
+                    )
+            running_sum += lengths[i]
+            running_sum_squares += lengths[i] * lengths[i]
         return signals

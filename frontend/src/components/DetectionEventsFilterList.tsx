@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { compareSeverityDesc, severityLabels } from "@/lib/format";
 
 const SEVERITIES: DetectionSeverity[] = ["critical", "high", "medium", "low", "info"];
+const INITIAL_VISIBLE_EVENTS = 100;
 
 const severityPillDot: Record<DetectionSeverity, string> = {
   info: "bg-slate-400",
@@ -25,6 +26,7 @@ export function DetectionEventsFilterList({
 }) {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [severityFilter, setSeverityFilter] = useState<string>("all");
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_EVENTS);
 
   const types = useMemo(
     () => Array.from(new Set(events.map((e) => e.detection_type))).sort(),
@@ -37,6 +39,7 @@ export function DetectionEventsFilterList({
       .filter((e) => severityFilter === "all" || e.severity === severityFilter)
       .sort((a, b) => compareSeverityDesc(a.severity, b.severity));
   }, [events, typeFilter, severityFilter]);
+  const visibleEvents = filtered.slice(0, visibleCount);
 
   return (
     <div className="space-y-4">
@@ -97,11 +100,20 @@ export function DetectionEventsFilterList({
         />
       ) : (
         <div className="space-y-3">
-          {filtered.map((event) => (
+          {visibleEvents.map((event) => (
             <DetectionEventCard key={event.id} sessionId={sessionId} event={event} />
           ))}
         </div>
       )}
+      {visibleCount < filtered.length ? (
+        <button
+          type="button"
+          onClick={() => setVisibleCount((count) => count + INITIAL_VISIBLE_EVENTS)}
+          className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        >
+          Load 100 more events ({filtered.length - visibleCount} remaining)
+        </button>
+      ) : null}
     </div>
   );
 }

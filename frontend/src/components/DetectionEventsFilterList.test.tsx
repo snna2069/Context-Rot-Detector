@@ -40,4 +40,15 @@ describe("DetectionEventsFilterList", () => {
       screen.getByLabelText("Filter by detection type"),
     ).toHaveValue("all");
   });
+
+  it("renders the initial event page without an unbounded DOM list", () => {
+    const events = Array.from({ length: 101 }, (_, index) => ({
+      ...event,
+      id: `event-${index}`,
+    }));
+
+    render(<DetectionEventsFilterList sessionId="session-1" events={events} />);
+
+    expect(screen.getByRole("button", { name: /load 100 more events/i })).toBeInTheDocument();
+  });
 });

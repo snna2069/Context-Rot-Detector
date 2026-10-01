@@ -73,6 +73,12 @@ class ToolResultNeglectDetector:
     def detect(self, context: SessionContext) -> list[Signal]:
         signals: list[Signal] = []
         messages = context.messages
+        content_words_by_message = {
+            message.id: content_words(message.content)
+            for message in messages
+            if message.role == MessageRole.ASSISTANT
+        }
+        result_words_by_tool_result = {}
 
         for i, message in enumerate(messages):
             for tool_call in message.tool_calls:
@@ -103,13 +109,14 @@ class ToolResultNeglectDetector:
                         )
                     continue
 
-                result_words = content_words(
-                    json.dumps(tool_call.result.output, default=str)
+                result_words = result_words_by_tool_result.setdefault(
+                    tool_call.result.id,
+                    content_words(json.dumps(tool_call.result.output, default=str)),
                 )
                 if not result_words:
                     continue
                 referenced = any(
-                    jaccard_similarity(result_words, content_words(m.content))
+                    jaccard_similarity(result_words, content_words_by_message[m.id])
                     >= REFERENCE_OVERLAP_THRESHOLD
                     for m in assistant_follow_up
                 )

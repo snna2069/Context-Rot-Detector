@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import re
 
-from app.analysis.context import SessionContext
+from app.analysis.context import MessageView, SessionContext
 from app.analysis.signals import Evidence, Signal
 from app.analysis.text_utils import content_words, jaccard_similarity
 from app.models import DetectionSeverity, DetectionType, MessageRole
@@ -72,37 +72,40 @@ class OmissionDetector:
     def detect(self, context: SessionContext) -> list[Signal]:
         signals: list[Signal] = []
         messages = context.messages
+        content_words_by_message = {
+            message.id: content_words(message.content) for message in messages
+        }
+        next_assistant_at_or_after: list[MessageView | None] = [None] * len(messages)
+        next_assistant: MessageView | None = None
+        for index in range(len(messages) - 1, -1, -1):
+            if messages[index].role == MessageRole.ASSISTANT:
+                next_assistant = messages[index]
+            next_assistant_at_or_after[index] = next_assistant
 
         for i, marker_message in enumerate(messages):
             if marker_message.role not in MARKER_ROLES:
                 continue
             if not _MARKER_PATTERN.search(marker_message.content):
                 continue
-            key_terms = content_words(marker_message.content)
+            key_terms = content_words_by_message[marker_message.id]
             if not key_terms:
                 continue
 
-            for follow_up in messages[i + 1 : i + 1 + LOOKAHEAD_MESSAGES]:
+            for follow_up_index, follow_up in enumerate(
+                messages[i + 1 : i + 1 + LOOKAHEAD_MESSAGES], start=i + 1
+            ):
                 if follow_up.role != MessageRole.USER:
                     continue
-                follow_up_words = content_words(follow_up.content)
+                follow_up_words = content_words_by_message[follow_up.id]
                 overlap = jaccard_similarity(key_terms, follow_up_words)
                 if overlap < TOPIC_OVERLAP_THRESHOLD:
                     continue
 
-                reply = next(
-                    (
-                        m
-                        for m in messages
-                        if m.sequence_number > follow_up.sequence_number
-                        and m.role == MessageRole.ASSISTANT
-                    ),
-                    None,
-                )
+                reply = next_assistant_at_or_after[follow_up_index + 1]
                 if reply is None:
                     continue
 
-                reply_words = content_words(reply.content)
+                reply_words = content_words_by_message[reply.id]
                 if key_terms & reply_words:
                     continue  # at least one distinguishing term was restated
 
